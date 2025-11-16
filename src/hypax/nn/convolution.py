@@ -91,20 +91,19 @@ class HConvolution2D(nnx.Module):
             )
 
         # Normalize kernel_size to tuple
-        self.kernel_size = _normalize_kernel_size(kernel_size)
+        self.kernel_size = nnx.static(_normalize_kernel_size(kernel_size))
         kernel_h, kernel_w = self.kernel_size
-        self.kernel_vol = kernel_h * kernel_w
+        self.kernel_vol = nnx.static(kernel_h * kernel_w)
 
         # Store configuration
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.manifold = manifold
-        self.has_bias = bias
-        self.stride = stride
-        self.padding = padding
-        self.id_init = id_init
-        self.dtype = dtype
-        self.param_dtype = param_dtype
+        self.in_channels = nnx.static(in_channels)
+        self.out_channels = nnx.static(out_channels)
+        self.has_bias = nnx.static(bias)
+        self.stride = nnx.static(stride)
+        self.padding = nnx.static(padding)
+        self.id_init = nnx.static(id_init)
+        self.dtype = nnx.static(dtype)
+        self.param_dtype = nnx.static(param_dtype)
 
         # Initialize parameters
         param_key = rngs.params()
@@ -147,7 +146,7 @@ class HConvolution2D(nnx.Module):
             )
 
         # Extract curvature from manifold
-        c = self.manifold.curvature.value
+        c = x.manifold.curvature.value
 
         # Calculate output spatial dimensions
         kernel_h, kernel_w = self.kernel_size
@@ -158,7 +157,7 @@ class HConvolution2D(nnx.Module):
         # Input: [batch, in_channels, height, width]
         # Output: [batch, kernel_vol * in_channels, num_patches]
         x_unfolded = poincare_unfold(
-            x=x.array,
+            x=x.data,
             kernel_size=self.kernel_size,
             in_channels=self.in_channels,
             c=c,
@@ -186,27 +185,4 @@ class HConvolution2D(nnx.Module):
         x_reshaped = x_fc.reshape(batch_size, self.out_channels, out_height, out_width)
 
         # Return as ManifoldArray
-        return ManifoldArray(data=x_reshaped, manifold=self.manifold)
-
-    def reset_parameters(self, rngs: nnx.Rngs) -> None:
-        """Re-initialize parameters.
-
-        This mirrors the PyTorch `reset_parameters` method.
-
-        Args:
-            rngs: `nnx.Rngs` container for generating new random keys
-        """
-        param_key = rngs.params()
-        weights, bias_init = construct_conv_parameters(
-            in_channels=self.in_channels,
-            out_channels=self.out_channels,
-            kernel_size=self.kernel_size,
-            use_bias=self.has_bias,
-            key=param_key,
-            dtype=self.param_dtype,
-            id_init=self.id_init,
-        )
-
-        self.weights.value = weights
-        if self.has_bias and bias_init is not None:
-            self.bias.value = bias_init
+        return x.replace(data=x_reshaped)

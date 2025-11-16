@@ -1,3 +1,4 @@
+# parser.add_argument('--n-linear', type=int, default=2)
 # hyperbolic_linear.py
 #
 # JAX/nnx implementation of a Poincaré fully-connected layer that mirrors
@@ -39,16 +40,10 @@ class HLinear(nnx.Module):
         """
         super().__init__()
 
-        self.in_features = in_features
-        self.out_features = out_features
-        self.manifold = manifold
-        self.use_bias = use_bias
-        self.dtype = dtype
-        self.param_dtype = param_dtype
-
+        self.in_features = nnx.static(in_features)
         z_key = rngs.params()
         b_key = rngs.params() if use_bias else None
-        weights, bias_value = self.manifold.construct_dl_parameters(
+        weights, bias_value = manifold.construct_dl_parameters(
             in_features=in_features,
             out_features=out_features,
             bias=use_bias,
@@ -68,39 +63,16 @@ class HLinear(nnx.Module):
         """Apply the hyperbolic fully connected operation."""
         if not isinstance(x, ManifoldArray):
             raise TypeError(f"Input must be a ManifoldArray, got {type(x)}")
-        if x.manifold is not self.manifold:
-            raise ValueError("Input manifold does not match layer manifold")
         if x.shape[-1] != self.in_features:
             raise ValueError(
                 f"Expected last dimension {self.in_features}, got {x.shape[-1]}"
             )
 
-        bias_value = self.bias.value if (self.bias is not None and self.use_bias) else None
-        result = self.manifold.fully_connected(
-            x=x.array,
+        bias_value = self.bias.value if (self.bias is not None) else None
+        result = x.manifold.fully_connected(
+            x=x.data,
             z=self.weights.value,
             bias=bias_value,
             axis=-1,
         )
-
-        return ManifoldArray(data=result, manifold=self.manifold)
-
-    def reset_parameters(self, rngs: nnx.Rngs) -> None:
-        """Re-initialize weights/bias."""
-        z_key = rngs.params()
-        b_key = rngs.params() if self.use_bias else None
-        weights, bias_value = self.manifold.construct_dl_parameters(
-            in_features=self.in_features,
-            out_features=self.out_features,
-            bias=self.use_bias,
-            key_z=z_key,
-            key_bias=b_key,
-            dtype=self.param_dtype,
-        )
-        self.weights.value = jnp.asarray(weights, dtype=self.param_dtype)
-        if self.bias is not None:
-            self.bias.value = (
-                jnp.asarray(bias_value, dtype=self.param_dtype)
-                if bias_value is not None
-                else None
-            )
+        return x.replace(data=result)

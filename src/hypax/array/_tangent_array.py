@@ -1,7 +1,6 @@
 import jax
-import jax.numpy as jnp
+from flax import struct
 
-
+@struct.dataclass
 class TangentArray:
-    def __init__(self, data: jax.Array):
-        self.array = data
+    data: jax.Array

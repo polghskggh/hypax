@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Tuple
 
 import jax.numpy as jnp
 from flax import nnx
+from flax import struct
 
 from hypax.array import ManifoldArray
 from hypax.manifolds import Manifold, PoincareBall
@@ -25,7 +25,7 @@ def _compute_out_dim(size: int, kernel: int, stride: int, padding: int) -> int:
     return (size + 2 * padding - kernel) // stride + 1
 
 
-@dataclass
+@struct.dataclass
 class _SpatialConfig:
     kernel_size: Tuple[int, int]
     stride: Tuple[int, int]
@@ -52,15 +52,12 @@ class HAvgPool2D(nnx.Module):
         stride = _to_pair(stride if stride is not None else kernel_size, "stride")
         pad = _to_pair(padding, "padding")
 
-        self.config = _SpatialConfig(kernel_size=kernel, stride=stride, padding=pad)
-        self.manifold = manifold
-        self.use_midpoint = use_midpoint
+        self.config = nnx.static(_SpatialConfig(kernel_size=kernel, stride=stride, padding=pad))
+        self.use_midpoint = nnx.static(use_midpoint)
 
     def __call__(self, x: ManifoldArray) -> ManifoldArray:
         if not isinstance(x, ManifoldArray):
             raise TypeError("HAvgPool2D expects a ManifoldArray input")
-        if x.manifold is not self.manifold:
-            raise ValueError("Input manifold does not match pooling manifold")
 
         batch_size, channels, height, width = x.shape
         kernel_h, kernel_w = self.config.kernel_size
@@ -73,10 +70,10 @@ class HAvgPool2D(nnx.Module):
         kernel_vol = kernel_h * kernel_w
 
         unfolded = poincare_unfold(
-            x=x.array,
+            x=x.data,
             kernel_size=self.config.kernel_size,
             in_channels=channels,
-            c=self.manifold.curvature.value,
+            c=x.manifold.curvature.value,
             stride=self.config.stride,
             padding=self.config.padding,
             axis=1,
@@ -84,20 +81,20 @@ class HAvgPool2D(nnx.Module):
         unfolded = unfolded.reshape(batch_size, channels, kernel_vol, num_patches)
 
         if self.use_midpoint:
-            pooled = self.manifold.midpoint(
+            pooled = x.manifold.midpoint(
                 unfolded,
                 reduce_axis=2,
                 axis=1,
             )
         else:
-            pooled = self.manifold.frechet_mean(
+            pooled = x.manifold.frechet_mean(
                 unfolded,
                 reduce_axis=2,
                 axis=1,
             )
 
         pooled = pooled.reshape(batch_size, channels, out_height, out_width)
-        return ManifoldArray(data=pooled, manifold=self.manifold)
+        return x.replace(data=pooled)
 
 
 class HMaxPool2D(nnx.Module):
@@ -124,16 +121,13 @@ class HMaxPool2D(nnx.Module):
         if ceil_mode:
             raise NotImplementedError("ceil_mode is not supported for HMaxPool2D")
 
-        self.config = _SpatialConfig(kernel_size=kernel, stride=stride, padding=pad)
-        self.manifold = manifold
+        self.config = nnx.static(_SpatialConfig(kernel_size=kernel, stride=stride, padding=pad))
 
     def __call__(self, x: ManifoldArray) -> ManifoldArray:
         if not isinstance(x, ManifoldArray):
             raise TypeError("HMaxPool2D expects a ManifoldArray input")
-        if x.manifold is not self.manifold:
-            raise ValueError("Input manifold does not match pooling manifold")
 
-        tangent = self.manifold.logmap(
+        tangent = x.manifold.logmap(
             y=x.array,
             x=None,
             axis=1,
@@ -156,9 +150,9 @@ class HMaxPool2D(nnx.Module):
         )
         nchw = jnp.transpose(pooled, (0, 3, 1, 2))
 
-        mapped = self.manifold.expmap(
+        mapped = x.manifold.expmap(
             v=nchw,
             x=None,
             axis=1,
         )
-        return ManifoldArray(data=mapped, manifold=self.manifold)
+        return x.replace(data=mapped)

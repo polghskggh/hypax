@@ -32,7 +32,7 @@ def riemannian_adam(
                 buf["v_hat"] = jnp.zeros_like(v)
             return buf
 
-        return jax.tree_map(_init_leaf, params)
+        return jax.tree.map(_init_leaf, params)
 
     def update_fn(grads, state, params):
         def _update_leaf(p, g, s):

@@ -39,7 +39,7 @@ def hrelu(
         preserving the hyperbolic geometry.
     """
     # Extract the underlying JAX array and manifold
-    data = x.array
+    data = x.data
     manifold = x.manifold
 
     # Get curvature from manifold if not provided

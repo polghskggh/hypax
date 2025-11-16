@@ -1,4 +1,4 @@
-"""Unit tests for ManifoldArray and TangentArray classes."""
+ """Unit tests for ManifoldArray and TangentArray classes."""
 
 import pytest
 import jax.numpy as jnp

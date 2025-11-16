@@ -1,7 +1,11 @@
+import time
+
+import jax
 from flax import nnx
 import optax
 from datasets import load_dataset
 import jax.numpy as jnp
+from pandas.core.interchange.from_dataframe import primitive_column_to_ndarray
 
 from tqdm.auto import tqdm
 
@@ -59,10 +63,7 @@ class HyperbolicCNN(nnx.Module):
 
         # Flatten to (batch_size, 64*7*7)
         batch_size = x.shape[0]
-        x = ManifoldArray(
-            data=x.array.reshape(batch_size, -1),
-            manifold=self.manifold
-        )
+        x = x.replace(data=x.data.reshape(batch_size, -1))
 
         # Hyperbolic linear layers
         x = self.linear1(x)
@@ -70,7 +71,7 @@ class HyperbolicCNN(nnx.Module):
         x = self.linear2(x)
 
         # Return the underlying array for loss computation
-        return x.array
+        return x.data
 
 
 print("Creating model...")
@@ -82,7 +83,7 @@ model = HyperbolicCNN(rngs=nnx.Rngs(0), manifold=manifold)
 learning_rate = 0.005
 momentum = 0.9
 
-optimizer = nnx.Optimizer(model, riemannian_adam(learning_rate))
+optimizer = nnx.Optimizer(model, riemannian_adam(learning_rate), wrt=nnx.Param)
 metrics = nnx.MultiMetric(
     accuracy=nnx.metrics.Accuracy(),
     loss=nnx.metrics.Average("loss"),
@@ -91,6 +92,7 @@ metrics = nnx.MultiMetric(
 
 def loss_fn(model: HyperbolicCNN, batch):
     logits = model(jnp.expand_dims(batch["image"], 1))
+    jax.debug.print('logit: {l}', l=logits)
     loss = optax.softmax_cross_entropy_with_integer_labels(
         logits=logits, labels=batch["label"]
     ).mean()
@@ -102,7 +104,7 @@ def train_step(model: HyperbolicCNN, optimizer: nnx.Optimizer, metrics: nnx.Mult
     grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
     (loss, logits), grads = grad_fn(model, batch)
     metrics.update(loss=loss, logits=logits, labels=batch["label"])
-    optimizer.update(grads)
+    optimizer.update(model, grads)
 
 
 @nnx.jit
@@ -132,7 +134,9 @@ def train_single_epoch():
         total=len(train_loader),
     ):
         # Convert images to correct shape if necessary (handled in preprocessing)
+        start_time = time.time()
         train_step(model, optimizer, metrics, batch)
+        print('batch_time: ', time.time() - start_time)
 
 
 def eval_single_epoch():
@@ -146,7 +150,7 @@ def eval_single_epoch():
         eval_step(model, metrics, batch)
 
 
-num_epochs = 100
+num_epochs = 10
 for epoch in tqdm(range(num_epochs), desc="Epoch"):
     train_single_epoch()
 
@@ -168,3 +172,4 @@ for epoch in tqdm(range(num_epochs), desc="Epoch"):
     metrics.reset()
 
     tqdm.write(msg)
+# OLD 17min for 10 epochs
