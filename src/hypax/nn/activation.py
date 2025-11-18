@@ -48,7 +48,7 @@ def hrelu(
             raise ValueError(
                 "Curvature not provided and manifold does not have curvature attribute"
             )
-        c = manifold.curvature.value
+        c = manifold.curvature()
 
     # Step 1: Map from manifold to tangent space at origin
     tangent = logmap0(data, c, axis=axis)
@@ -91,7 +91,7 @@ def helu(
         preserving the hyperbolic geometry.
     """
     # Extract the underlying JAX array and manifold
-    data = x.array
+    data = x.data
     manifold = x.manifold
 
     # Get curvature from manifold if not provided

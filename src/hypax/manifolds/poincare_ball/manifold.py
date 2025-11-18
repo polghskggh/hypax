@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 from flax import nnx
 
-from hypax.manifolds._base import Manifold
+from hypax.manifolds._base import Manifold, Curvature
 from hypax.manifolds.poincare_ball._linalg import poincare_fully_connected
 from hypax.manifolds.poincare_ball._diffgeom import (
     expmap0,
@@ -29,7 +29,6 @@ from hypax.manifolds.poincare_ball._stats import (
     midpoint as poincare_midpoint,
 )
 
-
 class PoincareBall(Manifold):
     """Poincaré ball model of hyperbolic space.
 
@@ -48,7 +47,7 @@ class PoincareBall(Manifold):
         >>> # Use manifold operations like expmap, logmap, etc.
     """
 
-    def __init__(self, c: float | jax.Array = 1.0):
+    def __init__(self, curvature: Curvature):
         """Initialize PoincareBall manifold.
 
         Args:
@@ -56,12 +55,7 @@ class PoincareBall(Manifold):
                Can be a scalar float or JAX array.
         """
         super().__init__()
-        c_array = jnp.asarray(c) if not isinstance(c, jax.Array) else c
-
-        if jnp.any(c_array <= 0):
-            raise ValueError(f"Curvature must be positive, got {c}")
-
-        self.curvature = nnx.Param(c_array)
+        self.curvature = curvature
 
     def expmap(
         self, v: jax.Array, x: jax.Array | None = None, axis: int = -1
@@ -77,9 +71,9 @@ class PoincareBall(Manifold):
             Point on manifold
         """
         if x is None:
-            return expmap0(v, self.curvature.value, axis=axis)
+            return expmap0(v, self.curvature(), axis=axis)
         else:
-            return expmap(x, v, self.curvature.value, axis=axis)
+            return expmap(x, v, self.curvature(), axis=axis)
 
     def logmap(
         self, y: jax.Array, x: jax.Array | None = None, axis: int = -1
@@ -95,9 +89,9 @@ class PoincareBall(Manifold):
             Tangent vector at base point
         """
         if x is None:
-            return logmap0(y, self.curvature.value, axis=axis)
+            return logmap0(y, self.curvature(), axis=axis)
         else:
-            return logmap(x, y, self.curvature.value, axis=axis)
+            return logmap(x, y, self.curvature(), axis=axis)
 
     def project(self, x: jax.Array, axis: int = -1, eps: float = -1.0) -> jax.Array:
         """Project point to be within the Poincaré ball.
@@ -110,7 +104,7 @@ class PoincareBall(Manifold):
         Returns:
             Point projected to be within ball
         """
-        return project(x, self.curvature.value, axis=axis, eps=eps)
+        return project(x, self.curvature(), axis=axis, eps=eps)
 
     def mobius_add(self, x: jax.Array, y: jax.Array, axis: int = -1) -> jax.Array:
         """Möbius addition in the Poincaré ball.
@@ -123,7 +117,7 @@ class PoincareBall(Manifold):
         Returns:
             Result of Möbius addition
         """
-        return mobius_add(x, y, self.curvature.value, axis=axis)
+        return mobius_add(x, y, self.curvature(), axis=axis)
 
     def dist(
         self, x: jax.Array, y: jax.Array, axis: int = -1, keepdims: bool = False
@@ -139,11 +133,11 @@ class PoincareBall(Manifold):
         Returns:
             Hyperbolic distance
         """
-        return dist(x, y, self.curvature.value, axis=axis, keepdims=keepdims)
+        return dist(x, y, self.curvature(), axis=axis, keepdims=keepdims)
 
     def cdist(self, x: jax.Array, y: jax.Array) -> jax.Array:
         """Pairwise hyperbolic distances between batches of points."""
-        return poincare_cdist(x, y, self.curvature.value)
+        return poincare_cdist(x, y, self.curvature())
 
     def frechet_mean(
         self,
@@ -159,7 +153,7 @@ class PoincareBall(Manifold):
         """Compute the Fréchet mean of points along ``reduce_axis``."""
         return poincare_frechet_mean(
             x=x,
-            c=self.curvature.value,
+            c=self.curvature(),
             manifold_axis=axis,
             reduce_axis=reduce_axis,
             keepdims=keepdims,
@@ -179,7 +173,7 @@ class PoincareBall(Manifold):
         """Compute the hyperbolic midpoint along ``reduce_axis``."""
         return poincare_midpoint(
             x=x,
-            c=self.curvature.value,
+            c=self.curvature(),
             manifold_axis=axis,
             reduce_axis=reduce_axis,
             keepdims=keepdims,
@@ -199,7 +193,7 @@ class PoincareBall(Manifold):
             x=x,
             u=u,
             v=v,
-            c=self.curvature.value,
+            c=self.curvature(),
             axis=axis,
             keepdims=keepdims,
         )
@@ -212,7 +206,7 @@ class PoincareBall(Manifold):
         return poincare_euc_to_tangent(
             x=x,
             u=u,
-            c=self.curvature.value,
+            c=self.curvature(),
             axis=axis,
         )
 
@@ -225,7 +219,7 @@ class PoincareBall(Manifold):
             x=x,
             y=y,
             v=v,
-            c=self.curvature.value,
+            c=self.curvature(),
             axis=axis,
         )
 
@@ -309,7 +303,8 @@ class PoincareBall(Manifold):
             Chen et al. "Fully Hyperbolic Neural Networks" (HNN++), ACL 2022
         """
         result = poincare_fully_connected(
-            x=x, z=z, bias=bias, c=self.curvature.value, axis=axis
+            x=x, z=z, bias=bias, c=self.curvature(), axis=axis
         )
+        # jax.debug.print('before projection {x}', x=result)
         # Project result to ensure it stays in the ball
         return self.project(result, axis=axis)

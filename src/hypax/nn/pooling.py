@@ -128,7 +128,7 @@ class HMaxPool2D(nnx.Module):
             raise TypeError("HMaxPool2D expects a ManifoldArray input")
 
         tangent = x.manifold.logmap(
-            y=x.array,
+            y=x.data,
             x=None,
             axis=1,
         )
