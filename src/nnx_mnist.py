@@ -9,6 +9,7 @@ from pandas.core.interchange.from_dataframe import primitive_column_to_ndarray
 
 from tqdm.auto import tqdm
 
+from hypax.manifolds._base import Curvature
 from hypax.utils.data import NumpyLoader
 from hypax.opt import riemannian_adam
 from hypax.manifolds.poincare_ball import PoincareBall
@@ -28,6 +29,22 @@ eval_loader = NumpyLoader(dataset["test"], batch_size=batch_size)
 
 eval_ds = dataset["test"].iter(batch_size=batch_size)
 
+class HyperbolicMLP(nnx.Module):
+    def __init__(self, rngs, manifold):
+        self.rngs = rngs
+        self.manifold = manifold
+        self.linear1 = HLinear(
+             784, 256, manifold=manifold, rngs=rngs
+        )
+        self.linear2 = HLinear(
+            256, 10, manifold=manifold, rngs=rngs
+        )
+    def __call__(self, x):
+        x = ManifoldArray(x.reshape(x.shape[0], -1),
+                          self.manifold)
+        x = self.linear1(x)
+        x = hrelu(x)
+        return x.data
 
 class HyperbolicCNN(nnx.Module):
     """A hyperbolic CNN model using hyperbolic layers."""
@@ -76,10 +93,10 @@ class HyperbolicCNN(nnx.Module):
 
 print("Creating model...")
 # Create the Poincaré ball manifold with curvature c=1.0
-manifold = PoincareBall(c=1.0)
+manifold = PoincareBall(curvature=Curvature(1.0))
 
 # Instantiate the hyperbolic model
-model = HyperbolicCNN(rngs=nnx.Rngs(0), manifold=manifold)
+model = HyperbolicMLP(rngs=nnx.Rngs(0), manifold=manifold)
 learning_rate = 0.005
 momentum = 0.9
 
@@ -90,11 +107,10 @@ metrics = nnx.MultiMetric(
 )
 
 
-def loss_fn(model: HyperbolicCNN, batch):
-    logits = model(jnp.expand_dims(batch["image"], 1))
-    jax.debug.print('logit: {l}', l=logits)
+def loss_fn(model: HyperbolicCNN, image, label):
+    logits = model(jnp.expand_dims(image, 1))
     loss = optax.softmax_cross_entropy_with_integer_labels(
-        logits=logits, labels=batch["label"]
+        logits=logits, labels=label
     ).mean()
     return loss, logits
 
@@ -102,15 +118,23 @@ def loss_fn(model: HyperbolicCNN, batch):
 @nnx.jit
 def train_step(model: HyperbolicCNN, optimizer: nnx.Optimizer, metrics: nnx.MultiMetric, batch):
     grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
-    (loss, logits), grads = grad_fn(model, batch)
-    metrics.update(loss=loss, logits=logits, labels=batch["label"])
+    inputs, labels = batch['image'], batch['label']
+    inputs = inputs / 1.0
+    manifold_inputs = manifold.expmap(inputs)
+    # [0.0015, 0.3412, 0.0000, 0.0000, 0.4197, 0.3400, 0.0000, 0.0000, 0.0000, 0.0000]
+    print(manifold_inputs[:10, 10, 10])
+    (loss, logits), grads = grad_fn(model, manifold_inputs, labels)
+    metrics.update(loss=loss, logits=logits, labels=labels)
     optimizer.update(model, grads)
 
 
 @nnx.jit
 def eval_step(model: HyperbolicCNN, metrics: nnx.MultiMetric, batch):
-    loss, logits = loss_fn(model, batch)
-    metrics.update(loss=loss, logits=logits, labels=batch["label"])
+    inputs, labels = batch['image'], batch['label']
+    inputs = inputs / 1.0
+    manifold_inputs = manifold.expmap(inputs)
+    loss, logits = loss_fn(model, manifold_inputs, labels)
+    metrics.update(loss=loss, logits=logits, labels=labels)
 
 
 metrics_history = {
@@ -134,9 +158,7 @@ def train_single_epoch():
         total=len(train_loader),
     ):
         # Convert images to correct shape if necessary (handled in preprocessing)
-        start_time = time.time()
         train_step(model, optimizer, metrics, batch)
-        print('batch_time: ', time.time() - start_time)
 
 
 def eval_single_epoch():

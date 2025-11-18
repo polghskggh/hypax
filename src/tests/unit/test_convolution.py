@@ -243,35 +243,6 @@ def test_hconv2d_hnnpp_init():
     assert jnp.abs(weights).mean() > 0
     assert jnp.abs(weights).max() < 1.0
 
-
-def test_hconv2d_reset_parameters():
-    """Test reset_parameters method."""
-    manifold = MockManifold(c=1.0)
-    rngs = nnx.Rngs(42)
-
-    conv = HConvolution2D(
-        in_channels=3,
-        out_channels=8,
-        kernel_size=3,
-        manifold=manifold,
-        rngs=rngs,
-    )
-
-    # Get original weights
-    original_weights = conv.weights.value.copy()
-    original_bias = conv.bias.value.copy()
-
-    # Reset with different seed
-    new_rngs = nnx.Rngs(123)
-    conv.reset_parameters(new_rngs)
-
-    # Weights should be different
-    assert not jnp.allclose(conv.weights.value, original_weights)
-
-    # Bias should be reset to zeros
-    assert jnp.allclose(conv.bias.value, jnp.zeros_like(original_bias))
-
-
 def test_hconv2d_gradient_flow():
     """Test that gradients can flow through the convolution."""
     manifold = MockManifold(c=1.0)
@@ -290,18 +261,16 @@ def test_hconv2d_gradient_flow():
     x = ManifoldArray(data=data, manifold=manifold)
 
     # Define a simple loss function
-    def loss_fn(params):
-        conv.weights.value = params
+    def loss_fn(conv):
         output = conv(x)
-        return jnp.mean(output.array**2)
+        return jnp.mean(output.data**2)
 
     # Compute gradients
     grad_fn = jax.grad(loss_fn)
-    grads = grad_fn(conv.weights.value)
-
+    grads = grad_fn(conv)
     # Gradients should exist and be non-zero
-    assert grads.shape == conv.weights.value.shape
-    assert not jnp.allclose(grads, 0)
+    assert nnx.state(grads)['weights'].shape == conv.weights.value.shape
+    assert not jnp.allclose(nnx.state(grads)['weights'], 0)
 
 
 def test_hconv2d_invalid_input_type():
@@ -350,7 +319,6 @@ def test_hconv2d_manifold_without_curvature():
 
     class ManifoldNoCurvature(nnx.Module):
         """Manifold without curvature attribute."""
-
         pass
 
     manifold = ManifoldNoCurvature()

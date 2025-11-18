@@ -4,7 +4,6 @@ Tests the Poincaré hyperplane distance and fully-connected layer operations.
 """
 
 import pytest
-import torch
 import jax.numpy as jnp
 import jax
 
@@ -12,8 +11,6 @@ from hypax.manifolds.poincare_ball._linalg import (
     poincare_hyperplane_dists as hypax_hyperplane_dists,
     poincare_fully_connected as hypax_fully_connected,
 )
-
-from tests.conftest import assert_arrays_close
 
 
 class TestPoincareHyperplaneDists:

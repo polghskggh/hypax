@@ -36,7 +36,7 @@ def test_hrelu_function_basic():
     assert result.shape == data.shape
 
     # Check that result data is different from input (ReLU should have effect)
-    assert not jnp.allclose(result.array, data)
+    assert not jnp.allclose(result.data, data)
 
 
 def test_hrelu_module():
@@ -72,7 +72,7 @@ def test_hrelu_zeros():
     result = hrelu(x, c=manifold.curvature.value)
 
     # Result should also be zero
-    assert jnp.allclose(result.array, jnp.zeros_like(data), atol=1e-6)
+    assert jnp.allclose(result.data, jnp.zeros_like(data), atol=1e-6)
 
 
 def test_hrelu_positive_values():

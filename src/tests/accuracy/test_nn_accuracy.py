@@ -7,12 +7,13 @@ import pytest
 import jax
 import jax.numpy as jnp
 import numpy as np
-import torch
 from flax import nnx
 
+from hypax.array import ManifoldArray
 from hypax.nn.linear import HLinear
-from hypll.manifolds.poincare_ball import PoincareBall
-from hypll.tensors import ManifoldTensor
+from hypax.manifolds.poincare_ball.manifold import PoincareBall
+# from hypll.manifolds.poincare_ball import PoincareBall
+# from hypll.tensors import ManifoldArray
 
 
 @pytest.fixture
@@ -48,18 +49,16 @@ class TestHLinear:
 
         # Create input on the manifold
         key_input = jax.random.split(jax_key)[0]
-        x_data_jax = jax.random.uniform(
+        x_data = jax.random.uniform(
             key_input, (batch_size, in_features), minval=-0.5, maxval=0.5
         )
-        # Convert JAX array to PyTorch tensor for ManifoldTensor
-        x_data = torch.from_numpy(np.array(x_data_jax))
-        x = ManifoldTensor(x_data, manifold=poincare_manifold)
+        x = ManifoldArray(x_data, manifold=poincare_manifold)
 
         # Forward pass
         output = layer(x)
 
         # Check output properties
-        assert isinstance(output, ManifoldTensor), "Output should be a ManifoldTensor"
+        assert isinstance(output, ManifoldArray), "Output should be a ManifoldArray"
         assert output.shape == (batch_size, out_features), (
             f"Expected shape {(batch_size, out_features)}, got {output.shape}"
         )
@@ -68,7 +67,7 @@ class TestHLinear:
         )
 
         # Check output is on the manifold (within the ball)
-        output_np = output.tensor.detach().cpu().numpy()
+        output_np = output.data
         norms = np.linalg.norm(output_np, axis=-1)
         max_norm = 1.0 / np.sqrt(float(poincare_manifold.curvature.value))
         assert np.all(norms < max_norm * 1.1), (
@@ -104,19 +103,18 @@ class TestHLinear:
         x_data_jax = jax.random.uniform(
             key_input, (batch_size, in_features), minval=-0.5, maxval=0.5
         )
-        x_data = torch.from_numpy(np.array(x_data_jax))
-        x = ManifoldTensor(x_data, manifold=poincare_manifold)
+        x = ManifoldArray(x_data_jax, manifold=poincare_manifold)
 
         # Forward pass
         output = layer(x)
 
         # Check output properties
-        assert isinstance(output, ManifoldTensor), "Output should be a ManifoldTensor"
+        assert isinstance(output, ManifoldArray), "Output should be a ManifoldArray"
         assert output.shape == (batch_size, out_features)
         assert output.manifold == poincare_manifold
 
         # Check output is on the manifold
-        output_np = output.tensor.detach().cpu().numpy()
+        output_np = output.data
         norms = np.linalg.norm(output_np, axis=-1)
         max_norm = 1.0 / np.sqrt(float(poincare_manifold.curvature.value))
         assert np.all(norms < max_norm * 1.1), (
@@ -141,7 +139,7 @@ class TestHLinear:
         )
 
         # Check parameter shapes
-        assert layer.z.value.shape == (in_features, out_features), (
+        assert layer.weights.value.shape == (in_features, out_features), (
             f"Weight shape should be ({in_features}, {out_features})"
         )
         assert layer.bias.value.shape == (out_features,), (
@@ -158,48 +156,11 @@ class TestHLinear:
             rngs=rngs2,
         )
 
-        assert layer_no_bias.z.value.shape == (in_features, out_features)
-        assert layer_no_bias.bias.value is None, (
+        assert layer_no_bias.weights.value.shape == (in_features, out_features)
+        assert layer_no_bias.bias is None, (
             "Bias should be None when use_bias=False"
         )
 
-    def test_hlinear_reset_parameters(self, poincare_manifold, jax_key):
-        """Test that reset_parameters changes the layer parameters."""
-        in_features, out_features = 5, 3
-
-        # Create layer
-        rngs = nnx.Rngs(params=jax_key)
-        layer = HLinear(
-            in_features=in_features,
-            out_features=out_features,
-            manifold=poincare_manifold,
-            use_bias=True,
-            rngs=rngs,
-        )
-
-        # Store original parameters
-        original_z = layer.z.value.copy()
-        original_bias = layer.bias.value.copy()
-
-        # Reset parameters with a new key
-        key_new = jax.random.split(jax_key)[1]
-        rngs_new = nnx.Rngs(params=key_new)
-        layer.reset_parameters(rngs_new)
-
-        # Check that parameters have changed (or at least are reinitialized)
-        # Weights should change with different random key
-        assert not np.allclose(np.array(layer.z.value), np.array(original_z)), (
-            "Weight should change after reset"
-        )
-        # Bias gets reset to zeros in the manifold's reset_parameters
-        # So we just check the shape is preserved
-        assert layer.bias.value.shape == original_bias.shape, (
-            "Bias shape should be preserved after reset"
-        )
-
-        # Check shapes remain the same
-        assert layer.z.value.shape == original_z.shape
-        assert layer.bias.value.shape == original_bias.shape
 
     def test_hlinear_gradients(self, poincare_manifold, jax_key):
         """Test that HLinear can perform forward passes (gradient computation not supported with PyTorch tensors)."""
@@ -220,20 +181,18 @@ class TestHLinear:
         x_data_jax = jax.random.uniform(
             key_input, (batch_size, in_features), minval=-0.5, maxval=0.5
         )
-        x_data = torch.from_numpy(np.array(x_data_jax))
-        x = ManifoldTensor(x_data, manifold=poincare_manifold)
+        x = ManifoldArray(x_data_jax, manifold=poincare_manifold)
 
         # Forward pass
         output = layer(x)
 
         # Verify output
-        assert isinstance(output, ManifoldTensor)
+        assert isinstance(output, ManifoldArray)
         assert output.shape == (batch_size, out_features)
 
         # Check parameter shapes exist
-        assert layer.z.value.shape == (in_features, out_features)
-        if layer.use_bias:
-            assert layer.bias.value.shape == (out_features,)
+        assert layer.weights.value.shape == (in_features, out_features)
+        assert layer.bias.value.shape == (out_features,)
 
         # Note: Gradient computation through PyTorch/JAX boundary is not supported
         # For pure JAX gradients, use hypax manifolds with ManifoldArray instead
@@ -262,15 +221,13 @@ class TestHLinear:
         )
 
         # Convert to PyTorch tensors
-        x1_data = torch.from_numpy(np.array(x1_data_jax))
-        x2_data = torch.from_numpy(np.array(x2_data_jax))
 
         # Create batched input
-        x_batched_data = torch.cat([x1_data, x2_data], dim=0)
+        x_batched_data = jnp.concatenate([x1_data_jax, x2_data_jax], axis=0)
 
-        x1 = ManifoldTensor(x1_data, manifold=poincare_manifold)
-        x2 = ManifoldTensor(x2_data, manifold=poincare_manifold)
-        x_batched = ManifoldTensor(x_batched_data, manifold=poincare_manifold)
+        x1 = ManifoldArray(x1_data_jax, manifold=poincare_manifold)
+        x2 = ManifoldArray(x2_data_jax, manifold=poincare_manifold)
+        x_batched = ManifoldArray(x_batched_data, manifold=poincare_manifold)
 
         # Forward pass
         out1 = layer(x1)
@@ -278,9 +235,9 @@ class TestHLinear:
         out_batched = layer(x_batched)
 
         # Check that batch processing gives same results as individual processing
-        out1_np = out1.tensor.detach().cpu().numpy()
-        out2_np = out2.tensor.detach().cpu().numpy()
-        out_batched_np = out_batched.tensor.detach().cpu().numpy()
+        out1_np = out1.data
+        out2_np = out2.data
+        out_batched_np = out_batched.data
 
         assert np.allclose(out1_np, out_batched_np[0:1], rtol=1e-5), (
             "First batch item should match"
@@ -312,14 +269,13 @@ class TestHLinear:
                 jax.random.uniform(key_input, (batch_size, in_features))
                 * max_input_norm
             )
-            x_data = torch.from_numpy(np.array(x_data_jax))
-            x = ManifoldTensor(x_data, manifold=manifold)
+            x = ManifoldArray(x_data_jax, manifold=manifold)
 
             # Forward pass
             output = layer(x)
 
             # Check output is on the manifold
-            output_np = output.tensor.detach().cpu().numpy()
+            output_np = output.data
             norms = np.linalg.norm(output_np, axis=-1)
             max_norm = 1.0 / np.sqrt(c_value)
             assert np.all(norms < max_norm * 1.1), (

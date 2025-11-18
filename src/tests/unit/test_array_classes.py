@@ -1,4 +1,4 @@
- """Unit tests for ManifoldArray and TangentArray classes."""
+"""Unit tests for ManifoldArray and TangentArray classes."""
 
 import pytest
 import jax.numpy as jnp
@@ -23,7 +23,7 @@ class TestManifoldArray:
         man_array = ManifoldArray(data, poincare_manifold)
 
         assert isinstance(man_array, ManifoldArray)
-        assert jnp.array_equal(man_array.array, data)
+        assert jnp.array_equal(man_array.data, data)
         assert man_array.manifold == poincare_manifold
 
     def test_manifold_array_shape(self, poincare_manifold):
@@ -67,14 +67,14 @@ class TestManifoldArray:
             man_array = ManifoldArray(data, manifold)
 
             assert man_array.manifold.curvature.value == c_value
-            assert jnp.array_equal(man_array.array, data)
+            assert jnp.array_equal(man_array.data, data)
 
     def test_manifold_array_preserves_dtype(self, poincare_manifold):
         """Test that ManifoldArray preserves float32 dtype."""
         # Test float32 (JAX default dtype)
         data_f32 = jnp.array([0.1, 0.2, 0.3], dtype=jnp.float32)
         man_array_f32 = ManifoldArray(data_f32, poincare_manifold)
-        assert man_array_f32.array.dtype == jnp.float32
+        assert man_array_f32.data.dtype == jnp.float32
 
     def test_manifold_array_empty(self, poincare_manifold):
         """Test ManifoldArray with empty array."""
@@ -83,14 +83,14 @@ class TestManifoldArray:
 
         assert man_array.shape == (0,)
         assert man_array.ndim == 1
-        assert len(man_array.array) == 0
+        assert len(man_array.data) == 0
 
     def test_manifold_array_zero_vector(self, poincare_manifold):
         """Test ManifoldArray with zero vector (origin)."""
         data = jnp.zeros((1, 3))
         man_array = ManifoldArray(data, poincare_manifold)
 
-        assert jnp.all(man_array.array == 0)
+        assert jnp.all(man_array.data == 0)
         assert man_array.shape == (1, 3)
 
 
@@ -103,64 +103,64 @@ class TestTangentArray:
         tan_array = TangentArray(data)
 
         assert isinstance(tan_array, TangentArray)
-        assert jnp.array_equal(tan_array.array, data)
+        assert jnp.array_equal(tan_array.data, data)
 
     def test_tangent_array_different_shapes(self):
         """Test TangentArray with different shapes."""
         # Test 1D
         data_1d = jnp.array([0.1, 0.2, 0.3])
         tan_array_1d = TangentArray(data_1d)
-        assert tan_array_1d.array.shape == (3,)
+        assert tan_array_1d.data.shape == (3,)
 
         # Test 2D
         data_2d = jnp.array([[0.1, 0.2], [0.3, 0.4]])
         tan_array_2d = TangentArray(data_2d)
-        assert tan_array_2d.array.shape == (2, 2)
+        assert tan_array_2d.data.shape == (2, 2)
 
         # Test 3D
         data_3d = jnp.ones((2, 3, 4))
         tan_array_3d = TangentArray(data_3d)
-        assert tan_array_3d.array.shape == (2, 3, 4)
+        assert tan_array_3d.data.shape == (2, 3, 4)
 
     def test_tangent_array_preserves_dtype(self):
         """Test that TangentArray preserves float32 dtype."""
         # Test float32 (JAX default dtype)
         data_f32 = jnp.array([0.1, 0.2, 0.3], dtype=jnp.float32)
         tan_array_f32 = TangentArray(data_f32)
-        assert tan_array_f32.array.dtype == jnp.float32
+        assert tan_array_f32.data.dtype == jnp.float32
 
     def test_tangent_array_empty(self):
         """Test TangentArray with empty array."""
         data = jnp.array([])
         tan_array = TangentArray(data)
 
-        assert tan_array.array.shape == (0,)
-        assert len(tan_array.array) == 0
+        assert tan_array.data.shape == (0,)
+        assert len(tan_array.data) == 0
 
     def test_tangent_array_zero_vector(self):
         """Test TangentArray with zero tangent vector."""
         data = jnp.zeros((1, 3))
         tan_array = TangentArray(data)
 
-        assert jnp.all(tan_array.array == 0)
-        assert tan_array.array.shape == (1, 3)
+        assert jnp.all(tan_array.data == 0)
+        assert tan_array.data.shape == (1, 3)
 
     def test_tangent_array_large_values(self):
         """Test TangentArray with large tangent vectors."""
         data = jnp.array([[100.0, 200.0, 300.0]])
         tan_array = TangentArray(data)
 
-        assert jnp.array_equal(tan_array.array, data)
+        assert jnp.array_equal(tan_array.data, data)
         # Tangent vectors can have arbitrary magnitude
-        assert jnp.all(jnp.isfinite(tan_array.array))
+        assert jnp.all(jnp.isfinite(tan_array.data))
 
     def test_tangent_array_negative_values(self):
         """Test TangentArray with negative values."""
         data = jnp.array([[-1.0, -2.0, -3.0]])
         tan_array = TangentArray(data)
 
-        assert jnp.array_equal(tan_array.array, data)
-        assert jnp.all(tan_array.array < 0)
+        assert jnp.array_equal(tan_array.data, data)
+        assert jnp.all(tan_array.data < 0)
 
 
 class TestArrayInteraction:
@@ -177,8 +177,8 @@ class TestArrayInteraction:
         man_array = ManifoldArray(manifold_data, poincare_manifold)
         tan_array = TangentArray(tangent_data)
 
-        assert man_array.shape == tan_array.array.shape
-        assert man_array.ndim == tan_array.array.ndim
+        assert man_array.shape == tan_array.data.shape
+        assert man_array.ndim == tan_array.data.ndim
 
     def test_wrapping_jax_operations(self, poincare_manifold):
         """Test that JAX operations can be applied to wrapped arrays."""
@@ -188,8 +188,8 @@ class TestArrayInteraction:
         tan_array = TangentArray(data)
 
         # Test that we can still perform JAX operations on the underlying arrays
-        man_sum = jnp.sum(man_array.array)
-        tan_sum = jnp.sum(tan_array.array)
+        man_sum = jnp.sum(man_array.data)
+        tan_sum = jnp.sum(tan_array.data)
 
         assert jnp.isfinite(man_sum)
         assert jnp.isfinite(tan_sum)
