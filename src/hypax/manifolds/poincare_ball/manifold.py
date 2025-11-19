@@ -305,6 +305,5 @@ class PoincareBall(Manifold):
         result = poincare_fully_connected(
             x=x, z=z, bias=bias, c=self.curvature(), axis=axis
         )
-        # jax.debug.print('before projection {x}', x=result)
         # Project result to ensure it stays in the ball
         return self.project(result, axis=axis)

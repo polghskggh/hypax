@@ -123,8 +123,6 @@ def train_step(model: HyperbolicCNN, optimizer: nnx.Optimizer, metrics: nnx.Mult
     inputs, labels = batch['image'], batch['label']
     inputs = inputs / 1.0
     manifold_inputs = model.manifold.expmap(inputs)
-    # torch [0.0015, 0.3412, 0.0000, 0.0000, 0.4197, 0.3400, 0.0000, 0.0000, 0.0000, 0.0000]
-    # jax [0.00281601 0.34403626 0.         0.         0.36831811 0.35981409, 0., 0., 0., 0.]
     (loss, logits), grads = grad_fn(model, manifold_inputs, labels)
     metrics.update(loss=loss, logits=logits, labels=labels)
     optimizer.update(model, grads)
@@ -196,6 +194,3 @@ for epoch in tqdm(range(num_epochs), desc="Epoch"):
     metrics.reset()
 
     tqdm.write(msg)
-#    JAX train_accuracy: 0.9316 train_loss: 0.2498 test_accuracy: 0.9140 test_loss: 0.3935 1min
-#    TORCH train_accuracy: 0.9219 train_loss: 0.3002 test_accuracy: 0.9662 test_loss: 0.1358
-# OLD 17min for 10 epochs
