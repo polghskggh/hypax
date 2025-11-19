@@ -26,7 +26,7 @@ from hypll.manifolds.poincare_ball.math.diffgeom import (
     gyration as hypll_gyration,
 )
 
-from src.tests.conftest import assert_arrays_close
+from tests.conftest import assert_arrays_close
 
 
 class TestMobiusAdd:
