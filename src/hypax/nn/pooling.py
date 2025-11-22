@@ -73,7 +73,7 @@ class HAvgPool2D(nnx.Module):
             x=x.data,
             kernel_size=self.config.kernel_size,
             in_channels=channels,
-            c=x.manifold.curvature.value,
+            c=x.manifold.curvature(),
             stride=self.config.stride,
             padding=self.config.padding,
             axis=1,

@@ -143,6 +143,7 @@ def unfold_2d(
     # Extract patches using strided slicing
     # Create indices for all patches
     patches = []
+    # TODO reimplement with jax.lax.scan/batchify
     for i in range(out_h):
         for j in range(out_w):
             h_start = i * stride_h

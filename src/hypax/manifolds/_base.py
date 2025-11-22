@@ -4,31 +4,6 @@ import jax
 import jax.numpy as jnp
 import typing as tp
 
-class Curvature(nnx.Module):
-    def __init__(self, value: float | jax.Array = 1.0,
-                 constraining_strategy: tp.Callable[[jax.Array], jax.Array] = nnx.softplus):
-        """Class representing curvature of a manifold.
-
-            Attributes:
-                value:
-                    Learnable parameter indicating curvature of the manifold. The actual
-                    curvature is calculated as constraining_strategy(value).
-                constraining_strategy:
-                    Function applied to the curvature value in order to constrain the
-                    curvature of the manifold. By default uses softplus to guarantee
-                    positive curvature.
-            """
-        value = jnp.asarray(value) if not isinstance(value, jax.Array) else value
-
-        if jnp.any(value <= 0):
-            raise ValueError(f"Curvature must be positive, got {value}")
-
-        self.value = nnx.Param(value)
-        self.constraining_strategy = constraining_strategy
-
-    def __call__(self):
-        return self.constraining_strategy(self.value.value)
-
 class Manifold(nnx.Module, ABC):
     """Abstract base class for Riemannian manifolds.
 

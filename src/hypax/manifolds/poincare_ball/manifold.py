@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 from flax import nnx
 
-from hypax.manifolds._base import Manifold, Curvature
+from hypax.manifolds._base import Manifold
 from hypax.manifolds.poincare_ball._linalg import poincare_fully_connected
 from hypax.manifolds.poincare_ball._diffgeom import (
     expmap0,
@@ -28,6 +28,9 @@ from hypax.manifolds.poincare_ball._stats import (
     frechet_mean as poincare_frechet_mean,
     midpoint as poincare_midpoint,
 )
+
+from hypax.manifolds.curvature import Curvature
+
 
 class PoincareBall(Manifold):
     """Poincaré ball model of hyperbolic space.
