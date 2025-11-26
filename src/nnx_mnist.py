@@ -45,7 +45,7 @@ class HyperbolicMLP(nnx.Module):
         x = ManifoldArray(x.reshape(x.shape[0], -1),
                           self.manifold)
         x = self.linear1(x)
-        x = hrelu(x)
+        x = hrelu(x, axis=1)
         return x.data
 
 class HyperbolicCNN(nnx.Module):
@@ -55,47 +55,51 @@ class HyperbolicCNN(nnx.Module):
         self.manifold = manifold
         # Hyperbolic convolution layers
         self.conv1 = HConvolution2D(
-            1, 10, kernel_size=3, padding=1, manifold=manifold, rngs=rngs
+            1, 32, kernel_size=3, padding=1, manifold=manifold, rngs=rngs
         )
-        # self.conv2 = HConvolution2D(
-        #     32, 64, kernel_size=3, padding=1, manifold=manifold, rngs=rngs
-        # )
-        # self.pool = HAvgPool2D(kernel_size=2, stride=2, manifold=manifold)
+        self.conv2 = HConvolution2D(
+            32, 64, kernel_size=3, padding=1, manifold=manifold, rngs=rngs
+        )
+        self.pool = HAvgPool2D(kernel_size=2, stride=2, manifold=manifold)
         # # Hyperbolic linear layers
-        # self.linear1 = HLinear(
-        #     64 * 7 * 7, 256, manifold=manifold, rngs=rngs
-        # )
-        # self.linear2 = HLinear(256, 10, manifold=manifold, rngs=rngs)
+        self.linear1 = HLinear(
+            64 * 7 * 7, 256, manifold=manifold, rngs=rngs
+        )
+        self.linear2 = HLinear(256, 10, manifold=manifold, rngs=rngs)
 
     def __call__(self, x):
         # Input x should be a regular JAX array, wrap it in ManifoldArray
         x = ManifoldArray(data=x, manifold=self.manifold)
 
         # Hyperbolic conv + activation
-        # jax.debug.print('input: {x}', x=x.data[0][0][:10])
         x = self.conv1(x)
-        # jax.debug.print('post_conv: {x}', x=x.data[0][0][:10])
+        # jax.debug.print('post-conv {x}', x=jnp.any(jnp.isnan(x.data)))
 
-        # x = hrelu(x)
-        # # jax.debug.print('post_hrelu: {x}', x=x.data[0][0][:10])
-        #
-        # x = self.pool(x)
-        # # jax.debug.print('post_pool: {x}', x=x.data[0][0][:10])
-        #
-        # x = self.conv2(x)
-        # x = hrelu(x)
-        # x = self.pool(x)
+        x = hrelu(x, axis=1)
+        # jax.debug.print('post-hrelu {x}', x=jnp.any(jnp.isnan(x.data)))
+
+        x = self.pool(x)
+        # jax.debug.print('post-pool {x}', x=jnp.any(jnp.isnan(x.data)))
+
+        x = self.conv2(x)
+        # jax.debug.print('post-conv2 {x}', x=jnp.any(jnp.isnan(x.data)))
+
+        x = hrelu(x, axis=1)
+        # jax.debug.print('post-hrelu2 {x}', x=jnp.any(jnp.isnan(x.data)))
+
+        x = self.pool(x)
+        # jax.debug.print('post-pool2 {x}', x=jnp.any(jnp.isnan(x.data)))
+
 
         # Flatten to (batch_size, 64*7*7)
         batch_size = x.shape[0]
-        x = x.replace(data=jnp.mean(x.data, axis=(2,3)))
-        # x = x.replace(data=x.data.reshape(batch_size, -1))
+        x = x.replace(data=x.data.reshape(batch_size, -1))
         # jax.debug.print('post_flatten: {x}', x=x.data[0][:10])
 
         # Hyperbolic linear layers
-        # x = self.linear1(x)
-        # x = hrelu(x)
-        # x = self.linear2(x)
+        x = self.linear1(x)
+        x = hrelu(x)
+        x = self.linear2(x)
 
         # Return the underlying array for loss computation
         return x.data
@@ -103,7 +107,7 @@ class HyperbolicCNN(nnx.Module):
 
 print("Creating model...")
 # Create the Poincaré ball manifold with curvature c=1.0
-manifold = PoincareBall(curvature=Curvature(1.0, learnable=False))
+manifold = PoincareBall(curvature=Curvature(1.0, learnable=True))
 
 # Instantiate the hyperbolic model
 model = HyperbolicCNN(rngs=nnx.Rngs(0), manifold=manifold)
@@ -118,29 +122,21 @@ metrics = nnx.MultiMetric(
 
 def loss_fn(model: HyperbolicCNN, image, label):
     logits = model(image)
-    jax.debug.print('logits {l}', l=logits)
     loss = optax.softmax_cross_entropy_with_integer_labels(
         logits=logits, labels=label
     ).mean()
-    jax.debug.print('loss: {loss}', loss=loss)
+    jax.debug.print('logits {logits}, loss: {loss}', logits=logits, loss=loss)
     return loss, logits
-
-def find_nans(path, leaf):
-    # Convert the path (tuple of keys) into a readable string
-    # e.g., ('params', 'linear1', 'kernel')
-    jax.debug.print('path: {path_str}, grads: {leaf}', path_str=path, leaf=leaf)
-    return leaf  # Return the leaf unchanged
 
 @nnx.jit
 def train_step(model: HyperbolicCNN, optimizer: nnx.Optimizer, metrics: nnx.MultiMetric, batch):
     grad_fn = nnx.value_and_grad(loss_fn, has_aux=True)
     inputs, labels = batch['image'], batch['label']
     inputs = jnp.expand_dims(inputs, 1)
-    inputs = inputs / 1.0
-    jax.debug.print('effective curvature: {loss} actual: {a}', loss=model.manifold.curvature(), a=model.manifold.curvature.value)
+    inputs /= 1.0
+    # inputs = (inputs - 0.13) / 0.30
     manifold_inputs = model.manifold.expmap(inputs, axis=1)
     (loss, logits), grads = grad_fn(model, manifold_inputs, labels)
-    jax.tree_util.tree_map_with_path(find_nans, grads)
     metrics.update(loss=loss, logits=logits, labels=labels)
     optimizer.update(model, grads)
 
@@ -148,7 +144,7 @@ def train_step(model: HyperbolicCNN, optimizer: nnx.Optimizer, metrics: nnx.Mult
 @nnx.jit
 def eval_step(model: HyperbolicCNN, metrics: nnx.MultiMetric, batch):
     inputs, labels = batch['image'], batch['label']
-    inputs = inputs / 1.0
+    # inputs = (inputs - 0.13) / 0.30
     inputs = jnp.expand_dims(inputs, 1)
 
     manifold_inputs = model.manifold.expmap(inputs, axis=1)

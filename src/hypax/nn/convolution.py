@@ -184,6 +184,5 @@ class HConvolution2D(nnx.Module):
         # Input: [batch, out_channels, num_patches]
         # Output: [batch, out_channels, out_height, out_width]
         x_reshaped = x_fc.reshape(batch_size, self.out_channels, out_height, out_width)
-        jax.debug.print('after {a} before {b} ', a=jnp.mean(x_reshaped), b=jnp.mean(x.data))
         # Return as ManifoldArray
         return x.replace(data=x_reshaped)

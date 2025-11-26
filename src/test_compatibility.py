@@ -1,3 +1,4 @@
+import hypll
 import hypll.manifolds.poincare_ball as pcb
 import hypll.nn as nn
 import jax
@@ -18,6 +19,7 @@ from hypax.manifolds.poincare_ball import PoincareBall
 from hypax.nn.convolution import HConvolution2D
 from hypax.opt import riemannian_adam
 from hypax.nn.linear import HLinear
+from hypax.manifolds.poincare_ball._linalg import poincare_fully_connected, poincare_hyperplane_dists
 
 jax.config.update("jax_enable_x64", True)
 
@@ -28,7 +30,10 @@ def test_jax(inputi):
     optimizer = nnx.Optimizer(jax_linear, riemannian_adam(1e-3), wrt=nnx.Param)
     w, b = jax_linear.weights.value, jax_linear.bias.value
     def loss_fn(model, input):
-        out = model(input).data
+        out = poincare_hyperplane_dists(
+            x=input.data, z=model.weights.value, r=None, c=input.manifold.curvature()
+        )
+        # out = model(input).data
         jax.debug.print('out {o}', o=out)
         return jnp.mean(out)
 
@@ -59,23 +64,19 @@ def test_torch(inputi, weight, bias):
     manifold = pcb.PoincareBall(pcb.Curvature(1.0))
     # torch_conv = nn.modules.convolution.HConvolution2d(in_channels=3, out_channels=5, kernel_size=3, manifold=manifold)
     torch_linear = nn.modules.linear.HLinear(in_features=3, out_features=5, manifold=manifold)
-
-    torch_linear.weights = ManifoldParameter(data=torch.tensor(np.array(weight)),
-                                           manifold=Euclidean(),
-                                           man_dim=0)
-    torch_linear.bias = torch.nn.Parameter(torch.as_tensor(np.array(bias)))
     optimizer = RiemannianAdam(torch_linear.parameters(), lr=1e-3)
 
     for i in range(1):
         input = TangentTensor(inputi, manifold=manifold, man_dim=1)
         input = manifold.expmap(input)
-        out = torch_linear(input).tensor
+        # out = torch_linear(input).tensor
+        out = hypll.manifolds.poincare_ball.math.linalg.poincare_hyperplane_dists(
+            x=input.tensor, z=torch_linear.z.tensor, r=None, c=input.manifold.c()
+        )
         print("TORCH", out)
         torch.mean(out).backward()
-        print('TORCH WEIGHT',torch_linear.weights.grad, 'TORCH BIAS', torch_linear.bias.grad)
+        print('TORCH WEIGHT',torch_linear.z.tensor.grad, 'TORCH BIAS', torch_linear.bias.grad)
         optimizer.step()
-
-    print(f'POST UPDATE {torch.sum(torch_linear.weights.tensor)}, {torch.sum(torch_linear.bias)}')
 
     return out
 
@@ -83,5 +84,17 @@ if __name__ == '__main__':
     input = torch.rand(1, 3)
     weight, bias = test_jax(jnp.array(input))
     out2 = test_torch(input, weight, bias)
-    # print('jax:', out[0,0,0,:10], 'torch:',out2[0,0,0,:10])
-    # print(torch.allclose(torch.tensor(out), out2))
+
+# JAX
+# Bias: [-2.2089598e-01 -2.2056706e-01 -7.1925245e-02 -5.5171375e-16 -5.5171375e-16]
+# Weights: [[0.04662199 0.04326872 0.0141096         nan        nan]
+#           [0.04359259 0.04686746 0.01419405        nan        nan]
+#           [0.16078743 0.16054802 0.08186265        nan        nan]]
+# TORCH
+# Bias: [-2.2090e-01, -2.2057e-01, -7.1925e-02, -5.5171e-16, -5.5171e-16]
+# Weights: None
+# OUTPUT: [0.1353, 0.1361, 0.5020, 0.0000, 0.0000]
+
+# GRADs are nan ->
+
+#

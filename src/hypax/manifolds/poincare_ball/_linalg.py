@@ -44,8 +44,12 @@ def poincare_hyperplane_dists(
 
     c_sqrt = jnp.sqrt(c)
     lam = 2 / (1 - c * jnp.pow(axis_shifted_x, 2).sum(axis=-1, keepdims=True))
-    z_norm = jnp.linalg.norm(z, axis=0)
-    z_norm = jnp.maximum(z_norm, 1e-15)
+    # z_norm = jnp.linalg.norm(z, axis=0)
+    # z_norm = jnp.maximum(z_norm, 1e-15)
+
+    z_norm_squared = jnp.sum(z ** 2, axis=0)
+    z_norm_clipped = jnp.maximum(z_norm_squared, 1e-15)
+    z_norm = jnp.sqrt(z_norm_clipped)
 
     # Computation can be simplified if there is no offset
     if r is None:
