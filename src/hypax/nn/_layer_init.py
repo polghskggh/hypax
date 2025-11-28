@@ -7,7 +7,6 @@ from typing import Tuple, Optional
 
 import jax
 import jax.numpy as jnp
-from flax import nnx
 
 
 def construct_conv_parameters(

@@ -1,22 +1,15 @@
-import json
-import time
-
-import jax
-from flax import nnx
+import jax.numpy as jnp
 import optax
 from datasets import load_dataset
-import jax.numpy as jnp
-from pandas.core.interchange.from_dataframe import primitive_column_to_ndarray
-
-from tqdm.auto import tqdm
-
-from hypax.utils.data import NumpyLoader
-from hypax.opt import riemannian_adam
-from hypax.manifolds.poincare_ball import PoincareBall
+from flax import nnx
 from hypax.array import ManifoldArray
-from hypax.nn import HAvgPool2D, HConvolution2D, HLinear, hrelu
 from hypax.manifolds.curvature import Curvature
+from hypax.manifolds.poincare_ball import PoincareBall
+from hypax.nn import HAvgPool2D, HConvolution2D, HLinear, hrelu
 from hypax.nn.pooling import HMaxPool2D
+from hypax.opt import riemannian_adam
+from hypax.utils.data import NumpyLoader
+from tqdm.auto import tqdm
 
 print("Loading dataset...")
 

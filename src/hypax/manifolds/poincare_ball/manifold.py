@@ -9,10 +9,8 @@ import typing as tp
 
 import jax
 import jax.numpy as jnp
-from flax import nnx
-
 from hypax.manifolds._base import Manifold
-from hypax.manifolds.poincare_ball._linalg import poincare_fully_connected
+from hypax.manifolds.curvature import Curvature
 from hypax.manifolds.poincare_ball._diffgeom import (
     expmap0,
     expmap,
@@ -26,13 +24,11 @@ from hypax.manifolds.poincare_ball._diffgeom import (
     transp as poincare_transp,
     cdist as poincare_cdist,
 )
+from hypax.manifolds.poincare_ball._linalg import poincare_fully_connected
 from hypax.manifolds.poincare_ball._stats import (
     frechet_mean as poincare_frechet_mean,
     midpoint as poincare_midpoint,
 )
-
-from hypax.manifolds.curvature import Curvature
-
 from hypax.utils.math import beta_func
 
 

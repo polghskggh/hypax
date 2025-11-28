@@ -3,13 +3,11 @@
 # JAX/nnx implementation of a Poincaré 2D convolution layer
 
 from __future__ import annotations
+
 from typing import Optional, Tuple
 
-import jax
 import jax.numpy as jnp
-import torch
 from flax import nnx
-
 from hypax.array import ManifoldArray
 from hypax.manifolds import Manifold
 from hypax.manifolds.poincare_ball._linalg import (
