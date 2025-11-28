@@ -31,22 +31,6 @@ eval_loader = NumpyLoader(dataset["test"], batch_size=batch_size)
 
 eval_ds = dataset["test"].iter(batch_size=batch_size)
 
-class HyperbolicMLP(nnx.Module):
-    def __init__(self, rngs, manifold):
-        self.rngs = rngs
-        self.manifold = manifold
-        self.linear1 = HLinear(
-             784, 256, manifold=manifold, rngs=rngs
-        )
-        self.linear2 = HLinear(
-            256, 10, manifold=manifold, rngs=rngs
-        )
-    def __call__(self, x):
-        x = ManifoldArray(x.reshape(x.shape[0], -1),
-                          self.manifold)
-        x = self.linear1(x)
-        x = hrelu(x, axis=1)
-        return x.data
 
 class HyperbolicCNN(nnx.Module):
     """A hyperbolic CNN model using hyperbolic layers."""
@@ -60,7 +44,7 @@ class HyperbolicCNN(nnx.Module):
         self.conv2 = HConvolution2D(
             32, 64, kernel_size=3, padding=1, manifold=manifold, rngs=rngs
         )
-        self.pool = HMaxPool2D(kernel_size=2, stride=2, manifold=manifold)
+        self.pool = HAvgPool2D(kernel_size=2, stride=2, manifold=manifold)
         # Hyperbolic linear layers
         self.linear1 = HLinear(
             64 * 7 * 7, 256, manifold=manifold, rngs=rngs

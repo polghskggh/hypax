@@ -145,16 +145,18 @@ def midpoint(
     mid = jnp.squeeze(mid, axis=-2)
     return _restore_axes(mid, axes, red, keepdims)
 
-
 def safe_arccosh(x, eps=1e-15):
-    return jnp.log(x + jnp.sqrt((x - 1.0) * (x + 1.0) + eps))
+    x_square = (x - 1.0) * (x + 1.0)
+    # x_square = jnp.maximum(x_square, eps)
+    x_square = x_square + eps
+    return jnp.log(x + jnp.sqrt(x_square))
 
-def safe_norm(x, axis, keepdims=True, etol=1e-15):
+def safe_norm(x, axis, keepdims=True, eps=1e-15):
     norm_squared = jnp.sum(x ** 2, axis=axis, keepdims=keepdims)
 
     # Clipping mechanism
     # norm_squared = jnp.maximum(norm_squared, etol)
-    norm_squared = norm_squared + etol
+    norm_squared = norm_squared + eps
 
     norm = jnp.sqrt(norm_squared)
     return norm
