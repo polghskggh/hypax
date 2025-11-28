@@ -99,7 +99,7 @@ def train_step(model: HyperbolicCNN, optimizer: nnx.Optimizer, metrics: nnx.Mult
     inputs = jnp.expand_dims(inputs, 1)
     inputs /= 1.0
     # inputs = (inputs - 0.13) / 0.30
-    (loss, logits), grads = grad_fn(model, manifold_inputs, labels)
+    (loss, logits), grads = grad_fn(model, inputs, labels)
     metrics.update(loss=loss, logits=logits, labels=labels)
     optimizer.update(model, grads)
 
@@ -110,8 +110,7 @@ def eval_step(model: HyperbolicCNN, metrics: nnx.MultiMetric, batch):
     # inputs = (inputs - 0.13) / 0.30
     inputs = jnp.expand_dims(inputs, 1)
 
-    manifold_inputs = model.manifold.expmap(inputs, axis=1)
-    loss, logits = loss_fn(model, manifold_inputs, labels)
+    loss, logits = loss_fn(model, inputs, labels)
     metrics.update(loss=loss, logits=logits, labels=labels)
 
 
