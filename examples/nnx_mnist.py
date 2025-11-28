@@ -85,7 +85,8 @@ metrics = nnx.MultiMetric(
 
 
 def loss_fn(model: HyperbolicCNN, image, label):
-    logits = model(image)
+    manifold_inputs = model.manifold.expmap(image, axis=1)
+    logits = model(manifold_inputs)
     loss = optax.softmax_cross_entropy_with_integer_labels(
         logits=logits, labels=label
     ).mean()
@@ -98,7 +99,6 @@ def train_step(model: HyperbolicCNN, optimizer: nnx.Optimizer, metrics: nnx.Mult
     inputs = jnp.expand_dims(inputs, 1)
     inputs /= 1.0
     # inputs = (inputs - 0.13) / 0.30
-    manifold_inputs = model.manifold.expmap(inputs, axis=1)
     (loss, logits), grads = grad_fn(model, manifold_inputs, labels)
     metrics.update(loss=loss, logits=logits, labels=labels)
     optimizer.update(model, grads)
