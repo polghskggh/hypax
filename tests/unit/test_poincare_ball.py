@@ -1,10 +1,13 @@
 import jax.numpy as jnp
+from flax import nnx
 
 from hypax.manifolds.poincare_ball import PoincareBall
 
+from src.hypax.manifolds.curvature import Curvature
+
 
 def test_inner_at_origin_matches_scaled_euclidean():
-    manifold = PoincareBall(c=1.0)
+    manifold = PoincareBall(Curvature(1.0))
     x = jnp.zeros((2,))
     u = jnp.array([1.0, 2.0])
     v = jnp.array([-3.0, 0.5])
@@ -16,7 +19,7 @@ def test_inner_at_origin_matches_scaled_euclidean():
 
 
 def test_euc_to_tangent_scales_by_lambda_squared():
-    manifold = PoincareBall(c=1.0)
+    manifold = PoincareBall(Curvature(1.0, constraining_strategy=nnx.identity))
     x = jnp.array([0.1, 0.0])
     u = jnp.array([0.5, -0.25])
 
@@ -29,7 +32,7 @@ def test_euc_to_tangent_scales_by_lambda_squared():
 
 
 def test_transp_preserves_norms():
-    manifold = PoincareBall(c=1.0)
+    manifold = PoincareBall(Curvature(1.0))
     x = jnp.array([0.05, -0.02])
     y = jnp.array([-0.03, 0.01])
     v = jnp.array([0.2, -0.1])
@@ -43,7 +46,7 @@ def test_transp_preserves_norms():
 
 
 def test_cdist_matches_pairwise_dist():
-    manifold = PoincareBall(c=1.0)
+    manifold = PoincareBall(Curvature(1.0))
     x = jnp.stack([jnp.array([0.1, 0.0]), jnp.array([0.0, 0.1])])
     y = jnp.stack([jnp.array([-0.05, 0.02]), jnp.array([0.02, -0.03])])
 

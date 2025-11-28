@@ -8,12 +8,12 @@ import torch
 from flax import nnx
 from flax.nnx import Rngs
 from hypll.manifolds.euclidean import Euclidean
-from hypll.nn import HReLU
 from hypll.optim import RiemannianAdam
 from hypll.tensors import ManifoldParameter
 from hypll.tensors import TangentTensor
 from jax._src.tree_util import tree_flatten_with_path
 
+from hypax.array import ManifoldArray
 from hypax.array import ManifoldArray
 from hypax.manifolds.curvature import Curvature
 from hypax.manifolds.poincare_ball import PoincareBall
@@ -22,67 +22,38 @@ from hypax.opt import riemannian_adam
 from hypax.nn.linear import HLinear
 from hypax.manifolds.poincare_ball._linalg import poincare_fully_connected, poincare_hyperplane_dists
 from hypax.nn.pooling import HMaxPool2D
-from torch.nn import Module
-
-from hypax.nn.activation import hrelu
 from hypax.nn.pooling import HAvgPool2D
 
 jax.config.update("jax_enable_x64", True)
 
-class JaxModel(nnx.Module):
-    def __init__(self, manifold):
-        self.conv = HConvolution2D(in_channels=1, out_channels=5, kernel_size=3, manifold=manifold, rngs=Rngs(0))
-        self.pool = HMaxPool2D(kernel_size=2, stride=2, manifold=manifold)
-        self.linear = HLinear(in_features=16, out_features=6, manifold=manifold, rngs=Rngs(0)) # 5
-
-    def __call__(self, x):
-        # x = self.conv(x)
-        # x = hrelu(x, axis=1)
-        # x = self.pool(x)
-        x = x.flatten(manifold_axis=1)
-        # x = self.linear(x)
-        return x
-
-class TorchModel(Module):
-    def __init__(self, manifold, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.activation_fn = HReLU(manifold)
-        self.conv = nn.HConvolution2d(in_channels=1, out_channels=5, kernel_size=3, manifold=manifold)
-        self.pool = nn.HMaxPool2d(kernel_size=2, manifold=manifold)
-        self.linear = nn.HLinear(in_features=16, out_features=6, manifold=manifold) # 5
-
-    def __call__(self, x):
-        # x = self.conv(x)
-        # x = self.activation_fn(x)
-        # x = self.pool(x)
-        x = x.flatten(start_dim=1)
-        # x = self.linear(x)
-        return x
-
 def test_jax(inputi):
     manifold = PoincareBall(curvature=Curvature(1.0))
-    jax_model = JaxModel(manifold)
-    optimizer = nnx.Optimizer(jax_model, riemannian_adam(1e-3), wrt=nnx.Param)
-    w, b = jax_model.conv.weights.value, jax_model.conv.bias.value
+    jax_linear = HLinear(in_features=3, out_features=5, manifold=manifold, rngs=Rngs(0))
+    jax_pool = HAvgPool2D(kernel_size=2, stride=2, manifold=manifold)
+
+    # jax_conv = HConvolution2D(in_channels=3, out_channels=5, kernel_size=3, manifold=manifold, rngs=Rngs(0))
+    optimizer = nnx.Optimizer(jax_linear, riemannian_adam(1e-3), wrt=nnx.Param)
+    w, b = jax_linear.weights.value, jax_linear.bias.value
 
     def loss_fn(model, input):
-        input = input.replace(data=input.manifold.expmap(input.data, axis=1))
         out = model(input).data
+        jax.debug.print('out {o}', o=out)
         # out = model(input).data
-        return jnp.sum(out)
+        return jnp.mean(out)
 
     @nnx.jit
     def fwd(model, optimizer, inputi):
-        input = ManifoldArray(inputi, manifold=manifold)
+        input = manifold.expmap(inputi, axis=1)
+        input = ManifoldArray(input, manifold=manifold)
         grads = jax.grad(loss_fn, argnums=1)(model, input)
         # optimizer.update(model, grads)
         return grads
 
     for _ in range(1):
-        grads = fwd(jax_model, optimizer, inputi)
+        jax_linear = fwd(jax_pool, optimizer, inputi)
         # 0s IN OUTPUT BREAK GRAD FLOW
 
-    for path, leaf in tree_flatten_with_path(grads)[0]:
+    for path, leaf in tree_flatten_with_path(jax_linear)[0]:
         print("Path:", path, "Leaf:", leaf)
 
     def print_leaf(path, leaf):
@@ -95,28 +66,27 @@ def test_jax(inputi):
 
 def test_torch(inputi, weight, bias):
     manifold = pcb.PoincareBall(pcb.Curvature(1.0, requires_grad=True))
-    torch_model = TorchModel(manifold)
-    torch_model.conv.weights.tensor = torch.nn.Parameter(torch.tensor(np.array(weight)))
-    torch_model.conv.bias = torch.nn.Parameter(torch.tensor(np.array(bias)))
-
-    optimizer = RiemannianAdam(torch_model.parameters(), lr=1e-3)
+    # torch_conv = nn.modules.convolution.HConvolution2d(in_channels=3, out_channels=5, kernel_size=3, manifold=manifold)
+    torch_linear = nn.HLinear(in_features=3, out_features=5, manifold=manifold)
+    torch_pool = nn.HAvgPool2d(kernel_size=2, manifold=manifold)
+    optimizer = RiemannianAdam(torch_linear.parameters(), lr=1e-3)
 
     for i in range(1):
         inputi.requires_grad = True
         input = TangentTensor(inputi, manifold=manifold, man_dim=1)
         input = manifold.expmap(input)
-        print("TORCH POST INITIAL EXPMAP", input.tensor)
-        out = torch_model(input).tensor
+
+        # out = torch_linear(input).tensor
+        out = torch_pool(input).tensor
         print('TORCH OUT', out)
-        torch.sum(out).backward()
-        print('TORCH WEIGHT',torch_model.conv.weights.tensor.grad, 'TORCH BIAS', torch_model.conv.bias.grad)
-        print('TORCH x grads', inputi.grad)
+        torch.mean(out).backward()
+        print("TORCH DATA", inputi.grad, "TORCH MANIFOLD", manifold.c.value.grad)
+        # print('TORCH WEIGHT',torch_linear.z.tensor.grad, 'TORCH BIAS', torch_linear.bias.grad)
         # optimizer.step()
 
     return out
 
 if __name__ == '__main__':
-    torch.manual_seed(42)
     input = torch.rand(1, 1, 4, 4)
     weight, bias = test_jax(jnp.array(input))
     out2 = test_torch(input, weight, bias)

@@ -51,7 +51,7 @@ def _restore_axes(
 def _l_prime(y: jax.Array) -> jax.Array:
     cond = y < 1e-12
     safe_y = jnp.maximum(y, 1e-12)
-    val = 2.0 * jnp.arccosh(1 + 2.0 * safe_y) / jnp.sqrt(safe_y**2 + safe_y)
+    val = 2.0 * safe_arccosh(1 + 2.0 * safe_y) / jnp.sqrt(safe_y**2 + safe_y)
     return jnp.where(cond, 4.0, val)
 
 
@@ -88,8 +88,9 @@ def _frechet_ball_forward(
         eta = (a_term + c * c_term - sqrt_term) / denom_eta
         candidate = jnp.expand_dims(eta, axis=-1) * b_term
 
-        diff_norm = jnp.linalg.norm(candidate - mu, axis=-1)
-        prev_norm = jnp.maximum(jnp.linalg.norm(mu, axis=-1), 1e-15)
+        # diff_norm = jnp.linalg.norm(candidate - mu, axis=-1)
+        diff_norm = safe_norm(candidate - mu, axis=-1, keepdims=False)
+        prev_norm = safe_norm(mu, axis=-1, keepdims=False)
         has_converged = (diff_norm < atol) | (diff_norm / prev_norm < rtol) | converged
 
         mu_next = jnp.where(jnp.expand_dims(has_converged, axis=-1), mu, candidate)
@@ -143,3 +144,17 @@ def midpoint(
     mid = frac / (1 + jnp.sqrt(jnp.maximum(1 - c * norm, 1e-15)))
     mid = jnp.squeeze(mid, axis=-2)
     return _restore_axes(mid, axes, red, keepdims)
+
+
+def safe_arccosh(x, eps=1e-15):
+    return jnp.log(x + jnp.sqrt((x - 1.0) * (x + 1.0) + eps))
+
+def safe_norm(x, axis, keepdims=True, etol=1e-15):
+    norm_squared = jnp.sum(x ** 2, axis=axis, keepdims=keepdims)
+
+    # Clipping mechanism
+    # norm_squared = jnp.maximum(norm_squared, etol)
+    norm_squared = norm_squared + etol
+
+    norm = jnp.sqrt(norm_squared)
+    return norm

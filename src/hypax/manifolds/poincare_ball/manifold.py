@@ -3,6 +3,8 @@
 # JAX implementation of the Poincaré ball model of hyperbolic space
 
 from __future__ import annotations
+
+import functools
 import typing as tp
 
 import jax
@@ -30,6 +32,8 @@ from hypax.manifolds.poincare_ball._stats import (
 )
 
 from hypax.manifolds.curvature import Curvature
+
+from hypax.utils.math import beta_func
 
 
 class PoincareBall(Manifold):
@@ -310,3 +314,29 @@ class PoincareBall(Manifold):
         )
         # Project result to ensure it stays in the ball
         return self.project(result, axis=axis)
+
+    def flatten(self, x, manifold_axis, start_axis=1, end_axis=-1):
+        manifold_axis = x.ndim + manifold_axis if manifold_axis < 0 else manifold_axis
+        start_axis = x.ndim + start_axis if start_axis < 0 else start_axis
+        end_axis = x.ndim + end_axis if end_axis < 0 else end_axis
+
+        flattened_shape = functools.reduce(lambda a, b: a * b, x.shape[start_axis: end_axis+1])
+        new_shape = x.shape[:start_axis] + (flattened_shape, ) + x.shape[end_axis+1:]
+        if start_axis <= manifold_axis <= end_axis:
+            # Use beta concatenation to flatten the manifold dimension of the tensor.
+            # Start by applying logmap at the origin and computing the betas.
+            x = self.logmap(x, axis=manifold_axis)
+            n_i = x.shape[manifold_axis]
+            n = flattened_shape
+            beta_n = beta_func(n / 2, 0.5)
+            beta_n_i = beta_func(n_i / 2, 0.5)
+            # Flatten the tensor and rescale.
+            x = jnp.reshape(x, new_shape)
+            x *= beta_n / beta_n_i
+            new_manifold_axis = start_axis
+            # Apply exponential map at the origin.
+            x = self.expmap(x, axis=new_manifold_axis)
+            return x
+        else:
+            flattened = jnp.reshape(x, new_shape)
+            return flattened

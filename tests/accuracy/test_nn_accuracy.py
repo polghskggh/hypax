@@ -12,6 +12,10 @@ from flax import nnx
 from hypax.array import ManifoldArray
 from hypax.nn.linear import HLinear
 from hypax.manifolds.poincare_ball.manifold import PoincareBall
+
+from hypax.manifolds.curvature import Curvature
+
+
 # from hypll.manifolds.poincare_ball import PoincareBall
 # from hypll.tensors import ManifoldArray
 
@@ -19,7 +23,7 @@ from hypax.manifolds.poincare_ball.manifold import PoincareBall
 @pytest.fixture
 def poincare_manifold():
     """Create a PoincareBall manifold for testing."""
-    return PoincareBall(c=1.0)
+    return PoincareBall(Curvature(1.0))
 
 
 class TestHLinear:
@@ -251,7 +255,7 @@ class TestHLinear:
         in_features, out_features, batch_size = 5, 3, 4
 
         for c_value in [0.5, 1.0, 2.0]:
-            manifold = PoincareBall(c=c_value)
+            manifold = PoincareBall(Curvature(c_value))
             rngs = nnx.Rngs(params=jax_key)
             layer = HLinear(
                 in_features=in_features,

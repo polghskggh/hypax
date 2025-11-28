@@ -1,6 +1,8 @@
 import jax
 import jax.numpy as jnp
 
+from hypax.manifolds.poincare_ball._stats import safe_norm
+
 
 def mobius_add(x: jax.Array, y: jax.Array, c: jax.Array, axis: int = -1) -> jax.Array:
     broadcast_dim = max(x.ndim, y.ndim)
@@ -25,9 +27,8 @@ def project(x: jax.Array, c: jax.Array, axis: int = -1, eps: float = -1.0) -> ja
 
     maxnorm = (1 - eps_val) / jnp.sqrt(c + 1e-15)
     maxnorm = jnp.where(c > 0, maxnorm, jnp.full_like(c, 1e15))
+    norm = safe_norm(x, axis)
 
-    norm = jnp.linalg.norm(x, axis=axis, keepdims=True, ord=2)
-    norm = jnp.maximum(norm, 1e-15)
     cond = norm > maxnorm
     projected = x / norm * maxnorm
 
@@ -35,20 +36,14 @@ def project(x: jax.Array, c: jax.Array, axis: int = -1, eps: float = -1.0) -> ja
 
 
 def expmap0(v: jax.Array, c: jax.Array, axis: int = -1):
-    v_norm = jnp.linalg.norm(v, axis=axis, keepdims=True)
-    v_norm = jnp.maximum(v_norm, 1e-15)
-
+    v_norm = safe_norm(v, axis)
     v_norm_c_sqrt = v_norm * jnp.sqrt(c)
-
     return project(jnp.tanh(v_norm_c_sqrt) * v / v_norm_c_sqrt, c, axis=axis)
 
 
 def logmap0(y: jax.Array, c: jax.Array, axis: int = -1):
-    y_norm = jnp.linalg.norm(y, axis=axis, keepdims=True)
-    y_norm = jnp.maximum(y_norm, 1e-15)
-
+    y_norm = safe_norm(y, axis)
     y_norm_c_sqrt = y_norm * jnp.sqrt(c)
-
     return jnp.atanh(y_norm_c_sqrt) * y / y_norm_c_sqrt
 
 
@@ -56,8 +51,7 @@ def expmap(x: jax.Array, v: jax.Array, c: jax.Array, axis: int = -1):
     broadcast_dim = max(x.ndim, v.ndim)
     axis = axis if axis >= 0 else broadcast_dim + axis
 
-    v_norm = jnp.linalg.norm(v, axis=axis - broadcast_dim + v.ndim, keepdims=True)
-    v_norm = jnp.maximum(v_norm, 1e-15)
+    v_norm = safe_norm(v, axis=axis - broadcast_dim + v.ndim)
 
     x_norm_sq = jnp.square(x).sum(axis=axis - broadcast_dim + x.ndim, keepdims=True)
     lambda_x = 2 / jnp.clip(1 - c * x_norm_sq, min=1e-15)
@@ -73,7 +67,7 @@ def logmap(x: jax.Array, y: jax.Array, c: jax.Array, axis: int = -1):
     axis = axis if axis >= 0 else broadcast_dim + axis
 
     min_x_y = mobius_add(-x, y, c, axis=axis)
-    min_x_y_norm = jnp.clip(jnp.linalg.norm(min_x_y, axis=axis, keepdims=True), min=1e-15)
+    min_x_y_norm = safe_norm(min_x_y, axis=axis)
 
     x_norm_sq = jnp.square(x).sum(axis=axis - broadcast_dim + x.ndim, keepdims=True)
     lambda_x = 2 / jnp.clip(1 - c * x_norm_sq, min=1e-15)

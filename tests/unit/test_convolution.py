@@ -8,13 +8,16 @@ from flax import nnx
 from hypax.array import ManifoldArray
 from hypax.nn import HConvolution2D
 
+from src.hypax.manifolds.curvature import Curvature
+
 
 class MockManifold(nnx.Module):
     """Mock manifold for testing."""
 
     def __init__(self, c: float = 1.0):
         super().__init__()
-        self.curvature = nnx.Param(jnp.array(c))
+        self.curvature = Curvature(c)
+
 
 
 def test_hconv2d_initialization():

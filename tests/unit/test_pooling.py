@@ -7,10 +7,12 @@ from hypax.array import ManifoldArray
 from hypax.manifolds.poincare_ball import PoincareBall
 from hypax.nn import HAvgPool2D, HMaxPool2D
 
+from hypax.manifolds.curvature import Curvature
+
 
 def _make_input(batch=1, channels=4, height=8, width=8, value=0.05):
     data = jnp.full((batch, channels, height, width), value)
-    manifold = PoincareBall(c=1.0)
+    manifold = PoincareBall(Curvature(1.0))
     return ManifoldArray(data=data, manifold=manifold), manifold
 
 

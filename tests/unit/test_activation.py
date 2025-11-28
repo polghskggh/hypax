@@ -8,13 +8,15 @@ from flax import nnx
 from hypax.array import ManifoldArray
 from hypax.nn import HReLU, hrelu
 
+from hypax.manifolds.curvature import Curvature
+
 
 class MockManifold(nnx.Module):
     """Mock manifold for testing."""
 
     def __init__(self, c: float = 1.0):
         super().__init__()
-        self.curvature = nnx.Param(jnp.array(c))
+        self.curvature = Curvature(c)
 
 
 def test_hrelu_function_basic():
@@ -27,7 +29,7 @@ def test_hrelu_function_basic():
     x = ManifoldArray(data=data, manifold=manifold)
 
     # Apply hrelu
-    result = hrelu(x, c=manifold.curvature.value)
+    result = hrelu(x, c=manifold.curvature())
 
     # Check that result is a ManifoldArray
     assert isinstance(result, ManifoldArray)
@@ -69,7 +71,7 @@ def test_hrelu_zeros():
     data = jnp.zeros((2, 3))
     x = ManifoldArray(data=data, manifold=manifold)
 
-    result = hrelu(x, c=manifold.curvature.value)
+    result = hrelu(x, c=manifold.curvature())
 
     # Result should also be zero
     assert jnp.allclose(result.data, jnp.zeros_like(data), atol=1e-6)
@@ -83,7 +85,7 @@ def test_hrelu_positive_values():
     data = jnp.array([[0.1, 0.2], [0.15, 0.05]])
     x = ManifoldArray(data=data, manifold=manifold)
 
-    result = hrelu(x, c=manifold.curvature.value)
+    result = hrelu(x, c=manifold.curvature())
 
     # Check that result is valid
     assert isinstance(result, ManifoldArray)

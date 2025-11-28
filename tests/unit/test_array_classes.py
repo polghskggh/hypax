@@ -7,11 +7,13 @@ from hypax.array._manifold_array import ManifoldArray
 from hypax.array._tangent_array import TangentArray
 from hypax.manifolds.poincare_ball import PoincareBall
 
+from hypax.manifolds.curvature import Curvature
+
 
 @pytest.fixture
 def poincare_manifold():
     """Create a PoincareBall manifold for testing."""
-    return PoincareBall(c=1.0)
+    return PoincareBall(Curvature(1.0))
 
 
 class TestManifoldArray:
@@ -63,10 +65,10 @@ class TestManifoldArray:
         data = jnp.array([[0.1, 0.2, 0.3]])
 
         for c_value in [0.5, 1.0, 2.0]:
-            manifold = PoincareBall(c=c_value)
+            manifold = PoincareBall(Curvature(c_value))
             man_array = ManifoldArray(data, manifold)
 
-            assert man_array.manifold.curvature.value == c_value
+            assert man_array.manifold.curvature.value.value == c_value
             assert jnp.array_equal(man_array.data, data)
 
     def test_manifold_array_preserves_dtype(self, poincare_manifold):
