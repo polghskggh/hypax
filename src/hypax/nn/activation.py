@@ -100,7 +100,7 @@ def helu(
             raise ValueError(
                 "Curvature not provided and manifold does not have curvature attribute"
             )
-        c = manifold.curvature.value
+        c = manifold.curvature()
 
     # Step 1: Map from manifold to tangent space at origin
     tangent = logmap0(data, c, axis=axis)
