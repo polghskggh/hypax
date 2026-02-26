@@ -1,3 +1,4 @@
+import chex
 from flax import nnx
 import jax
 import typing as tp
@@ -21,17 +22,14 @@ class Curvature(nnx.Module):
         if jnp.any(value <= 0):
             raise ValueError(f"Curvature must be positive, got {value}")
 
-        self.learnable = nnx.static(learnable)
+        self.learnable = learnable
         if learnable:
             self.value = nnx.Param(value)
             self.constraining_strategy = constraining_strategy
         else:
-            self.value = nnx.static(value)
+            self.value = value
             self.constraining_strategy = nnx.identity
 
     def __call__(self):
-        if self.learnable:
-            curvature = self.value.value
-        else:
-            curvature = self.value
+        curvature = self.value.value if self.learnable else self.value
         return self.constraining_strategy(curvature)

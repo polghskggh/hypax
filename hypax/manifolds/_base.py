@@ -114,3 +114,14 @@ class Manifold(nnx.Module, ABC):
             Output on manifold
         """
         ...
+
+    def unfold(self,
+               x: jax.Array,
+               kernel_size: tuple[int, int],
+               in_channels: int,
+               stride: int | tuple[int, int] = 1,
+               padding: int | tuple[int, int] = 0,
+               axis: int = 1):
+        """
+
+        """

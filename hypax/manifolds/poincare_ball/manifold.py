@@ -25,11 +25,13 @@ from hypax.manifolds.poincare_ball._diffgeom import (
     cdist as poincare_cdist,
 )
 from hypax.manifolds.poincare_ball._linalg import poincare_fully_connected
+from hypax.manifolds.poincare_ball._math import rescale_norm, poincare_hyperplane_dists
 from hypax.manifolds.poincare_ball._stats import (
     frechet_mean as poincare_frechet_mean,
     midpoint as poincare_midpoint,
 )
 from hypax.utils.math import beta_func
+from jax import lax
 
 
 class PoincareBall(Manifold):
@@ -51,28 +53,12 @@ class PoincareBall(Manifold):
     """
 
     def __init__(self, curvature: Curvature):
-        """Initialize PoincareBall manifold.
-
-        Args:
-            c: Curvature parameter (default: 1.0). Must be positive.
-               Can be a scalar float or JAX array.
-        """
         super().__init__()
         self.curvature = curvature
 
     def expmap(
         self, v: jax.Array, x: jax.Array | None = None, axis: int = -1
     ) -> jax.Array:
-        """Exponential map: map from tangent space to manifold.
-
-        Args:
-            v: Tangent vector
-            x: Base point on manifold (if None, uses origin)
-            axis: Manifold dimension axis
-
-        Returns:
-            Point on manifold
-        """
         if x is None:
             return expmap0(v, self.curvature(), axis=axis)
         else:
@@ -305,10 +291,12 @@ class PoincareBall(Manifold):
         References:
             Chen et al. "Fully Hyperbolic Neural Networks" (HNN++), ACL 2022
         """
-        result = poincare_fully_connected(
-            x=x, z=z, bias=bias, c=self.curvature(), axis=axis
-        )
-        # Project result to ensure it stays in the ball
+        c = self.curvature()
+        c_sqrt = jnp.sqrt(c)
+        x = poincare_hyperplane_dists(x=x, z=z, r=bias, c=c, axis=axis)
+        x = jnp.sinh(c_sqrt * x) / c_sqrt
+
+        result = x / (1 + jnp.sqrt(1 + c * jnp.pow(x, 2).sum(axis=axis, keepdims=True)))
         return self.project(result, axis=axis)
 
     def flatten(self, x, manifold_axis, start_axis=1, end_axis=-1):
@@ -336,3 +324,14 @@ class PoincareBall(Manifold):
         else:
             flattened = jnp.reshape(x, new_shape)
             return flattened
+
+    def unfold(self, x: jax.Array, kernel_size, channels, stride, padding, axis=0):
+        kernel_h, kernel_w = kernel_size
+        kernel_vol = kernel_h * kernel_w
+
+        x_tangent = self.logmap(x, axis=axis)
+        x_tangent = rescale_norm(x_tangent, channels, channels * kernel_vol)
+
+        patches = lax.conv_general_dilated_patches(x_tangent, kernel_size, window_strides=stride, padding=padding)
+        x_manifold = self.expmap(patches, axis=axis)
+        return x_manifold

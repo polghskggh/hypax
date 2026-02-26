@@ -124,8 +124,7 @@ class HMaxPool2D(nnx.Module):
         self.config = nnx.static(_SpatialConfig(kernel_size=kernel, stride=stride, padding=pad))
 
     def __call__(self, x: ManifoldArray) -> ManifoldArray:
-        if not isinstance(x, ManifoldArray):
-            raise TypeError("HMaxPool2D expects a ManifoldArray input")
+        assert isinstance(x, ManifoldArray)
 
         tangent = x.manifold.logmap(
             y=x.data,

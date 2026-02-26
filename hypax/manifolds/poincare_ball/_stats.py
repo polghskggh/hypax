@@ -5,7 +5,6 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-
 def _normalize_axis(axis: int, ndim: int) -> int:
     if axis < 0:
         axis += ndim
@@ -13,11 +12,10 @@ def _normalize_axis(axis: int, ndim: int) -> int:
         raise ValueError(f"Axis {axis} is out of bounds for ndim={ndim}")
     return axis
 
-
 def _align_axes_for_reduction(
-    x: jax.Array,
-    manifold_axis: int,
-    reduce_axis: int,
+        x: jax.Array,
+        manifold_axis: int,
+        reduce_axis: int,
 ) -> tuple[jax.Array, list[int], int]:
     ndim = x.ndim
     man = _normalize_axis(manifold_axis, ndim)
@@ -28,7 +26,6 @@ def _align_axes_for_reduction(
     axes = [i for i in range(ndim) if i not in (red, man)] + [red, man]
     permuted = jnp.transpose(x, axes)
     return permuted, axes, red
-
 
 def _restore_axes(
     data: jax.Array,
@@ -144,19 +141,3 @@ def midpoint(
     mid = frac / (1 + jnp.sqrt(jnp.maximum(1 - c * norm, 1e-15)))
     mid = jnp.squeeze(mid, axis=-2)
     return _restore_axes(mid, axes, red, keepdims)
-
-def safe_arccosh(x, eps=1e-15):
-    x_square = (x - 1.0) * (x + 1.0)
-    # x_square = jnp.maximum(x_square, eps)
-    x_square = x_square + eps
-    return jnp.log(x + jnp.sqrt(x_square))
-
-def safe_norm(x, axis, keepdims=True, eps=1e-15):
-    norm_squared = jnp.sum(x ** 2, axis=axis, keepdims=keepdims)
-
-    # Clipping mechanism
-    # norm_squared = jnp.maximum(norm_squared, etol)
-    norm_squared = norm_squared + eps
-
-    norm = jnp.sqrt(norm_squared)
-    return norm

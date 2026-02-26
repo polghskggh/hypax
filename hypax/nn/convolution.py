@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
+import chex
 import jax.numpy as jnp
 from flax import nnx
 from hypax.array import ManifoldArray
@@ -83,13 +84,7 @@ class HConvolution2D(nnx.Module):
         rngs         : `nnx.Rngs` container (use `.params()`).
         """
         super().__init__()
-
-        # Validate manifold has curvature attribute
-        if not hasattr(manifold, "curvature"):
-            raise ValueError(
-                "Manifold must have a curvature attribute for hyperbolic convolution"
-            )
-
+        assert hasattr(manifold, "curvature")
         # Normalize kernel_size to tuple
         self.kernel_size = nnx.static(_normalize_kernel_size(kernel_size))
         kernel_h, kernel_w = self.kernel_size
@@ -133,19 +128,10 @@ class HConvolution2D(nnx.Module):
         Returns:
             ManifoldArray with shape [batch, out_channels, out_height, out_width]
         """
-        # Validate input
-        if not isinstance(x, ManifoldArray):
-            raise TypeError(f"Input must be a ManifoldArray, got {type(x)}")
+        chex.assert_type(x, ManifoldArray)
+        chex.assert_shape(x, (..., self.in_channels))
 
         batch_size, channels, height, width = x.shape
-
-        if channels != self.in_channels:
-            raise ValueError(
-                f"Expected {self.in_channels} input channels, got {channels}"
-            )
-
-        # Extract curvature from manifold
-        c = x.manifold.curvature()
 
         # Calculate output spatial dimensions
         kernel_h, kernel_w = self.kernel_size
@@ -153,34 +139,26 @@ class HConvolution2D(nnx.Module):
         out_width = (width + 2 * self.padding - kernel_w) // self.stride + 1
 
         # Step 1: Hyperbolic unfold with beta-concatenation
-        # Input: [batch, in_channels, height, width]
+        # Input: [batch, height, width, in_channels]
         # Output: [batch, kernel_vol * in_channels, num_patches]
-        x_unfolded = poincare_unfold(
+        x_unfolded = x.manifold.unfold(
             x=x.data,
             kernel_size=self.kernel_size,
             in_channels=self.in_channels,
-            c=c,
             stride=self.stride,
             padding=self.padding,
-            axis=1,  # Channel axis
+            axis=-1,  # Channel axis
         )
 
-        # Step 2: Apply hyperbolic fully connected layer
-        # Input: [batch, kernel_vol * in_channels, num_patches]
-        # Weights: [kernel_vol * in_channels, out_channels]
-        # Output: [batch, out_channels, num_patches]
-        bias_value = self.bias.value if self.has_bias else None
-        x_fc = poincare_fully_connected(
+        x_fc = x.manifold.fully_connected(
             x=x_unfolded,
             z=self.weights.value,
-            bias=bias_value,
-            c=c,
-            axis=1,  # Apply FC along the feature dimension
-        )
+            bias= self.bias.value,
+            axis=-1)
 
         # Step 3: Reshape to spatial format
-        # Input: [batch, out_channels, num_patches]
-        # Output: [batch, out_channels, out_height, out_width]
+        # Input: [batch, num_patches, out_channels]
+        # Output: [batch, out_height, out_width, out_channels]
         x_reshaped = x_fc.reshape(batch_size, self.out_channels, out_height, out_width)
         # Return as ManifoldArray
         return x.replace(data=x_reshaped)

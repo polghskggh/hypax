@@ -7,6 +7,7 @@
 from __future__ import annotations
 import typing as tp
 
+import chex
 import jax.numpy as jnp
 from flax import nnx
 
@@ -17,38 +18,17 @@ from hypax.manifolds import Manifold
 class HLinear(nnx.Module):
     """Hyperbolic (Poincaré) fully-connected layer for JAX/nnx."""
 
-    def __init__(
-        self,
-        in_features: int,
-        out_features: int,
-        manifold: Manifold,
-        *,
-        use_bias: bool = True,
-        dtype: tp.Optional[jnp.dtype] = None,
-        param_dtype: jnp.dtype = jnp.float32,
-        rngs: nnx.Rngs,
-    ):
-        """
-        Args
-        ----
-        in_features / out_features : Input & output feature sizes.
-        manifold                  : Instance of `hypax.manifolds.Manifold`.
-        use_bias                  : Attach bias term (default **True**).
-        dtype                     : Computation dtype (default: infer).
-        param_dtype               : Parameter dtype (default **float32**).
-        rngs                      : `nnx.Rngs` container (use `.params()`).
-        """
+    def __init__(self, in_features: int, out_features: int, manifold: Manifold, use_bias: bool = True, *,
+                 dtype: tp.Optional[jnp.dtype] = None, param_dtype: jnp.dtype = jnp.float32, rngs: nnx.Rngs):
         super().__init__()
 
-        self.in_features = nnx.static(in_features)
-        z_key = rngs.params()
-        b_key = rngs.params() if use_bias else None
+        self.in_features = in_features
         weights, bias_value = manifold.construct_dl_parameters(
             in_features=in_features,
             out_features=out_features,
             bias=use_bias,
-            key_z=z_key,
-            key_bias=b_key,
+            key_z=rngs.params(),
+            key_bias=rngs.params() if use_bias else None,
             dtype=param_dtype,
         )
 
@@ -61,12 +41,8 @@ class HLinear(nnx.Module):
 
     def __call__(self, x: ManifoldArray) -> ManifoldArray:
         """Apply the hyperbolic fully connected operation."""
-        if not isinstance(x, ManifoldArray):
-            raise TypeError(f"Input must be a ManifoldArray, got {type(x)}")
-        if x.shape[-1] != self.in_features:
-            raise ValueError(
-                f"Expected last dimension {self.in_features}, got {x.shape[-1]}"
-            )
+        assert isinstance(x, ManifoldArray)
+        chex.assert_shape(x.shape, (..., self.in_features))
 
         bias_value = self.bias.value if (self.bias is not None) else None
         result = x.manifold.fully_connected(
