@@ -5,7 +5,7 @@ from typing import Tuple, Sequence
 from hypax.manifolds.poincare_ball._diffgeom import logmap0, expmap0
 from hypax.utils.math import beta_func
 
-from hypax.manifolds.poincare_ball._stats import safe_norm
+from hypax.manifolds.poincare_ball._math import safe_norm
 
 
 def _pair(value: int | Tuple[int, int] | Sequence[int]) -> Tuple[int, int]:

@@ -42,7 +42,7 @@ class HLinear(nnx.Module):
     def __call__(self, x: ManifoldArray) -> ManifoldArray:
         """Apply the hyperbolic fully connected operation."""
         assert isinstance(x, ManifoldArray)
-        chex.assert_shape(x.shape, (..., self.in_features))
+        chex.assert_shape(x, (..., self.in_features))
 
         bias_value = self.bias.value if (self.bias is not None) else None
         result = x.manifold.fully_connected(

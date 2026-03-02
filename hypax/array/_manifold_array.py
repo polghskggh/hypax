@@ -8,7 +8,7 @@ from hypax.manifolds import Manifold
 class ManifoldArray:
     data: jax.Array
     manifold: Manifold
-    axis: int
+    axis: int = -1
 
     @property
     def ndim(self):

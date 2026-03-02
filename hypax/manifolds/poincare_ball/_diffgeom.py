@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 
-from hypax.manifolds.poincare_ball._stats import safe_norm
+from hypax.manifolds.poincare_ball._math import safe_norm
 
 
 def mobius_add(x: jax.Array, y: jax.Array, c: jax.Array, axis: int = -1) -> jax.Array:
@@ -115,19 +115,9 @@ def transp(x: jax.Array, y: jax.Array, v: jax.Array, c: jax.Array, axis: int = -
 def dist(
     x: jax.Array, y: jax.Array, c: jax.Array, axis: int = -1, keepdims: bool = False
 ) -> jax.Array:
-    return (
-        2
-        / jnp.sqrt(c)
-        * jnp.atanh(
-            (
-                jnp.sqrt(c)
-                * jnp.linalg.norm(
-                    mobius_add(-x, y, c, axis=axis), axis=axis, keepdims=keepdims
-                )
-            )
-        )
-    )
-
+    return (2 / jnp.sqrt(c) * jnp.atanh((jnp.sqrt(c) *
+                                         jnp.linalg.norm(mobius_add(-x, y, c, axis=axis), axis=axis, keepdims=keepdims)
+                                         )))
 
 def inner(
     x: jax.Array,

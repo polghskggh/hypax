@@ -13,7 +13,6 @@ from hypax.array import ManifoldArray
 from hypax.manifolds import Manifold
 from hypax.manifolds.poincare_ball._linalg import (
     poincare_unfold,
-    poincare_fully_connected,
 )
 from hypax.nn._layer_init import construct_conv_parameters
 
@@ -33,24 +32,6 @@ class HConvolution2D(nnx.Module):
     1. Unfold: Extract patches with beta-concatenation rescaling
     2. Fully connected: Apply hyperbolic linear transformation
     3. Reshape: Reform the spatial structure
-
-    Example:
-        >>> from hypax.manifolds.poincare_ball import PoincareBall
-        >>> manifold = PoincareBall(c=1.0)
-        >>> conv = HConvolution2D(
-        ...     in_channels=3,
-        ...     out_channels=16,
-        ...     kernel_size=5,
-        ...     manifold=manifold,
-        ...     rngs=nnx.Rngs(0)
-        ... )
-        >>> x = ManifoldArray(
-        ...     data=jnp.zeros((1, 3, 32, 32)),
-        ...     manifold=manifold
-        ... )
-        >>> y = conv(x)
-        >>> y.shape
-        (1, 16, 28, 28)
     """
 
     def __init__(
@@ -62,7 +43,7 @@ class HConvolution2D(nnx.Module):
         *,
         bias: bool = True,
         stride: int = 1,
-        padding: int = 0,
+        padding: str = "SAME",
         id_init: bool = True,
         dtype: Optional[jnp.dtype] = None,
         param_dtype: jnp.dtype = jnp.float32,
@@ -94,7 +75,7 @@ class HConvolution2D(nnx.Module):
         self.in_channels = nnx.static(in_channels)
         self.out_channels = nnx.static(out_channels)
         self.has_bias = nnx.static(bias)
-        self.stride = nnx.static(stride)
+        self.stride = nnx.static(_normalize_kernel_size(stride))
         self.padding = nnx.static(padding)
         self.id_init = nnx.static(id_init)
         self.dtype = nnx.static(dtype)
@@ -128,15 +109,8 @@ class HConvolution2D(nnx.Module):
         Returns:
             ManifoldArray with shape [batch, out_channels, out_height, out_width]
         """
-        chex.assert_type(x, ManifoldArray)
+        assert isinstance(x, ManifoldArray)
         chex.assert_shape(x, (..., self.in_channels))
-
-        batch_size, channels, height, width = x.shape
-
-        # Calculate output spatial dimensions
-        kernel_h, kernel_w = self.kernel_size
-        out_height = (height + 2 * self.padding - kernel_h) // self.stride + 1
-        out_width = (width + 2 * self.padding - kernel_w) // self.stride + 1
 
         # Step 1: Hyperbolic unfold with beta-concatenation
         # Input: [batch, height, width, in_channels]
@@ -144,12 +118,11 @@ class HConvolution2D(nnx.Module):
         x_unfolded = x.manifold.unfold(
             x=x.data,
             kernel_size=self.kernel_size,
-            in_channels=self.in_channels,
+            channels=self.in_channels,
             stride=self.stride,
             padding=self.padding,
             axis=-1,  # Channel axis
         )
-
         x_fc = x.manifold.fully_connected(
             x=x_unfolded,
             z=self.weights.value,
@@ -159,6 +132,7 @@ class HConvolution2D(nnx.Module):
         # Step 3: Reshape to spatial format
         # Input: [batch, num_patches, out_channels]
         # Output: [batch, out_height, out_width, out_channels]
-        x_reshaped = x_fc.reshape(batch_size, self.out_channels, out_height, out_width)
+        # x_reshaped = x_fc.reshape(batch_size, out_height, out_width, self.out_channels)
+
         # Return as ManifoldArray
-        return x.replace(data=x_reshaped)
+        return x.replace(data=x_fc)

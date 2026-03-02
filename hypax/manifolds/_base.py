@@ -118,7 +118,7 @@ class Manifold(nnx.Module, ABC):
     def unfold(self,
                x: jax.Array,
                kernel_size: tuple[int, int],
-               in_channels: int,
+               channels: int,
                stride: int | tuple[int, int] = 1,
                padding: int | tuple[int, int] = 0,
                axis: int = 1):

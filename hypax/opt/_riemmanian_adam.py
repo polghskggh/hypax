@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+from flax import nnx
 
 from optax import GradientTransformation
 
@@ -27,7 +28,7 @@ def riemannian_adam(
             buf = {"m": m, "v": v, "step": jnp.zeros([], jnp.int32)}
             if amsgrad:
                 buf["v_hat"] = jnp.zeros_like(v)
-            return buf
+            return nnx.state(buf)
 
         return jax.tree.map(_init_leaf, params)
 

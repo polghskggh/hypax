@@ -9,6 +9,8 @@ import typing as tp
 
 import jax
 import jax.numpy as jnp
+from jax._src.lax.convolution import conv_dimension_numbers
+
 from hypax.manifolds._base import Manifold
 from hypax.manifolds.curvature import Curvature
 from hypax.manifolds.poincare_ball._diffgeom import (
@@ -24,7 +26,6 @@ from hypax.manifolds.poincare_ball._diffgeom import (
     transp as poincare_transp,
     cdist as poincare_cdist,
 )
-from hypax.manifolds.poincare_ball._linalg import poincare_fully_connected
 from hypax.manifolds.poincare_ball._math import rescale_norm, poincare_hyperplane_dists
 from hypax.manifolds.poincare_ball._stats import (
     frechet_mean as poincare_frechet_mean,
@@ -325,13 +326,15 @@ class PoincareBall(Manifold):
             flattened = jnp.reshape(x, new_shape)
             return flattened
 
-    def unfold(self, x: jax.Array, kernel_size, channels, stride, padding, axis=0):
+    def unfold(self, x: jax.Array, kernel_size: tuple, channels, stride, padding, axis=0):
         kernel_h, kernel_w = kernel_size
         kernel_vol = kernel_h * kernel_w
 
         x_tangent = self.logmap(x, axis=axis)
         x_tangent = rescale_norm(x_tangent, channels, channels * kernel_vol)
-
-        patches = lax.conv_general_dilated_patches(x_tangent, kernel_size, window_strides=stride, padding=padding)
+        format = ("NHWC", "HWIO", "NHWC")
+        dnums = conv_dimension_numbers(x.shape, (kernel_h, kernel_w, x.shape[-1], channels), format)
+        patches = lax.conv_general_dilated_patches(x_tangent, kernel_size, window_strides=stride, padding=padding,
+                                                   dimension_numbers=dnums)
         x_manifold = self.expmap(patches, axis=axis)
         return x_manifold
