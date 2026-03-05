@@ -3,7 +3,7 @@ from flax import nnx
 
 from hypax.manifolds.poincare_ball import PoincareBall
 
-from src.hypax.manifolds.curvature import Curvature
+from hypax.manifolds.curvature import Curvature
 
 
 def test_inner_at_origin_matches_scaled_euclidean():

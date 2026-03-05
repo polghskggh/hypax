@@ -21,6 +21,6 @@ class ManifoldArray:
     def shape(self):
         return self.data.shape
 
-    def flatten(self, manifold_axis, start_axis: int = 1, end_axis: int = -1):
-        new_data = self.manifold.flatten(self.data, manifold_axis, start_axis=start_axis, end_axis=end_axis)
+    def flatten(self, start_axis: int = 1, end_axis: int = -1):
+        new_data = self.manifold.flatten(self.data, self.axis, start_axis=start_axis, end_axis=end_axis)
         return self.replace(data=new_data)

@@ -11,7 +11,6 @@ from flax import struct
 
 from hypax.array import ManifoldArray
 from hypax.manifolds import Manifold, PoincareBall
-from hypax.manifolds.poincare_ball._linalg import poincare_unfold
 from hypax.nn.helpers import tangent_space_fn
 
 
@@ -71,14 +70,13 @@ class HAvgPool2D(nnx.Module):
         num_patches = out_height * out_width
         kernel_vol = kernel_h * kernel_w
 
-        unfolded = poincare_unfold(
+        unfolded = x.manifold.unfold(
             x=x.data,
             kernel_size=self.config.kernel_size,
-            in_channels=channels,
-            c=x.manifold.curvature(),
+            channels=channels,
             stride=self.config.stride,
             padding=self.config.padding,
-            axis=1,
+            axis=x.axis,
         )
         unfolded = unfolded.reshape(batch_size, channels, kernel_vol, num_patches)
 
@@ -108,10 +106,11 @@ class HMaxPool2D(nnx.Module):
         *,
         stride: int | Tuple[int, int] | None = None,
         padding: int | Tuple[int, int] = "Valid",
-        dilation: int | Tuple[int, int] = 1,
     ):
         super().__init__()
-        self.pool_fn = partial(nnx.max_pool, window_shape=kernel_size, strides=stride, padding=padding)
+        kernel = _to_pair(kernel_size, "kernel_size")
+        strides = _to_pair(stride if stride is not None else kernel_size, "stride")
+        self.pool_fn = partial(nnx.max_pool, window_shape=kernel, strides=strides, padding=padding)
 
     def __call__(self, x: ManifoldArray) -> ManifoldArray:
         assert isinstance(x, ManifoldArray)

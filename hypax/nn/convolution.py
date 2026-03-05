@@ -11,9 +11,7 @@ import jax.numpy as jnp
 from flax import nnx
 from hypax.array import ManifoldArray
 from hypax.manifolds import Manifold
-from hypax.manifolds.poincare_ball._linalg import (
-    poincare_unfold,
-)
+
 from hypax.nn._layer_init import construct_conv_parameters
 
 

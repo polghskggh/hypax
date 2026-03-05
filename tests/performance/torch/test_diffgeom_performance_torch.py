@@ -4,7 +4,9 @@ Benchmarks hypll (PyTorch) implementations.
 """
 
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
+pytest.importorskip("hypll")
 
 from hypll.manifolds.poincare_ball.math.diffgeom import expmap0 as hypll_expmap0
 

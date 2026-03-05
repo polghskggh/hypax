@@ -1,140 +1,60 @@
 """Unit tests for hyperbolic activation functions."""
 
-import jax
 import jax.numpy as jnp
-import pytest
 from flax import nnx
 
 from hypax.array import ManifoldArray
-from hypax.nn import HReLU, hrelu
-
+from hypax.nn import hrelu
 from hypax.manifolds.curvature import Curvature
+from hypax.manifolds.poincare_ball import PoincareBall
 
 
-class MockManifold(nnx.Module):
-    """Mock manifold for testing."""
-
-    def __init__(self, c: float = 1.0):
-        super().__init__()
-        self.curvature = Curvature(c)
+def _make_manifold(c=1.0):
+    return PoincareBall(Curvature(c, learnable=False))
 
 
-def test_hrelu_function_basic():
-    """Test basic hrelu function."""
-    # Create a simple manifold
-    manifold = MockManifold(c=1.0)
-
-    # Create test data with positive and negative components
-    data = jnp.array([[0.1, -0.2], [0.3, -0.1]])
-    x = ManifoldArray(data=data, manifold=manifold)
-
-    # Apply hrelu
-    result = hrelu(x, c=manifold.curvature())
-
-    # Check that result is a ManifoldArray
+def test_hrelu_returns_manifold_array():
+    manifold = _make_manifold()
+    x = ManifoldArray(data=jnp.array([[0.1, -0.2], [0.3, -0.1]]), manifold=manifold)
+    result = hrelu(x)
     assert isinstance(result, ManifoldArray)
-
-    # Check that result has same shape
-    assert result.shape == data.shape
-
-    # Check that result data is different from input (ReLU should have effect)
-    assert not jnp.allclose(result.data, data)
-
-
-def test_hrelu_module():
-    """Test HReLU module."""
-    # Create a simple manifold
-    manifold = MockManifold(c=1.0)
-
-    # Create activation module
-    activation = HReLU()
-
-    # Create test data
-    data = jnp.array([[0.2, -0.3], [-0.1, 0.4]])
-    x = ManifoldArray(data=data, manifold=manifold)
-
-    # Apply activation
-    result = activation(x)
-
-    # Check that result is a ManifoldArray
-    assert isinstance(result, ManifoldArray)
-
-    # Check that result has same shape
-    assert result.shape == data.shape
+    assert result.shape == x.shape
 
 
 def test_hrelu_zeros():
-    """Test hrelu with zero input."""
-    manifold = MockManifold(c=1.0)
-
-    # Zero input should map to zero (origin of manifold)
-    data = jnp.zeros((2, 3))
-    x = ManifoldArray(data=data, manifold=manifold)
-
-    result = hrelu(x, c=manifold.curvature())
-
-    # Result should also be zero
-    assert jnp.allclose(result.data, jnp.zeros_like(data), atol=1e-6)
-
-
-def test_hrelu_positive_values():
-    """Test hrelu with all positive values in tangent space."""
-    manifold = MockManifold(c=1.0)
-
-    # Small positive values that should remain largely unchanged
-    data = jnp.array([[0.1, 0.2], [0.15, 0.05]])
-    x = ManifoldArray(data=data, manifold=manifold)
-
-    result = hrelu(x, c=manifold.curvature())
-
-    # Check that result is valid
-    assert isinstance(result, ManifoldArray)
-    assert result.shape == data.shape
-
-
-def test_hrelu_custom_axis():
-    """Test hrelu with custom axis."""
-    manifold = MockManifold(c=1.0)
-
-    # Create HReLU with custom axis
-    activation = HReLU(axis=-2)
-
-    data = jnp.array([[0.1, -0.2], [0.3, -0.1]])
-    x = ManifoldArray(data=data, manifold=manifold)
-
-    result = activation(x)
-
-    # Check that result is valid
-    assert isinstance(result, ManifoldArray)
-    assert result.shape == data.shape
-
-
-def test_hrelu_curvature_extraction():
-    """Test that hrelu can extract curvature from manifold."""
-    manifold = MockManifold(c=2.0)
-
-    data = jnp.array([[0.05, -0.1]])
-    x = ManifoldArray(data=data, manifold=manifold)
-
-    # Call without explicit curvature - should extract from manifold
+    """Zero input (origin) should map back to origin."""
+    manifold = _make_manifold()
+    x = ManifoldArray(data=jnp.zeros((2, 3)), manifold=manifold)
     result = hrelu(x)
-
-    assert isinstance(result, ManifoldArray)
-    assert result.shape == data.shape
+    assert jnp.allclose(result.data, jnp.zeros_like(x.data), atol=1e-6)
 
 
-def test_hrelu_missing_curvature_raises():
-    """Test that hrelu raises error if curvature not available."""
+def test_hrelu_negative_values_suppressed():
+    """Negative tangent components should be zeroed by relu."""
+    manifold = _make_manifold()
+    # Small negative values — logmap is approximately identity near origin
+    data = jnp.array([[-0.05, -0.1]])
+    x = ManifoldArray(data=data, manifold=manifold)
+    result = hrelu(x)
+    # Result should be near origin (relu kills negatives → expmap(0) = 0)
+    assert jnp.all(jnp.abs(result.data) < jnp.abs(data))
 
-    class ManifoldNoCurvature(nnx.Module):
-        """Manifold without curvature attribute."""
 
-        pass
-
-    manifold = ManifoldNoCurvature()
+def test_hrelu_preserves_positive():
+    """Positive tangent components should remain non-zero."""
+    manifold = _make_manifold()
     data = jnp.array([[0.1, 0.2]])
     x = ManifoldArray(data=data, manifold=manifold)
+    result = hrelu(x)
+    assert isinstance(result, ManifoldArray)
+    # Result should be non-zero (positive values pass through relu)
+    assert jnp.any(result.data != 0)
 
-    # Should raise ValueError when curvature cannot be extracted
-    with pytest.raises(ValueError, match="Curvature not provided"):
-        hrelu(x)
+
+def test_hrelu_different_curvatures():
+    for c in [0.5, 1.0, 2.0]:
+        manifold = _make_manifold(c)
+        x = ManifoldArray(data=jnp.array([[0.05, -0.05]]), manifold=manifold)
+        result = hrelu(x)
+        assert isinstance(result, ManifoldArray)
+        assert result.shape == x.shape

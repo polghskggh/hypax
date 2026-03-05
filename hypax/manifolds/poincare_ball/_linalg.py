@@ -1,11 +1,10 @@
-import jax
-import jax.numpy as jnp
 from typing import Tuple, Sequence
 
-from hypax.manifolds.poincare_ball._diffgeom import logmap0, expmap0
-from hypax.utils.math import beta_func
+import jax
+import jax.numpy as jnp
 
-from hypax.manifolds.poincare_ball._math import safe_norm
+from hypax.manifolds.poincare_ball._math import expmap0, logmap0
+from hypax.utils.math import beta_func
 
 
 def _pair(value: int | Tuple[int, int] | Sequence[int]) -> Tuple[int, int]:
@@ -82,65 +81,3 @@ def unfold_2d(
     output = jnp.stack(patches, axis=-1)
 
     return output
-
-
-def poincare_unfold(
-    x: jax.Array,
-    kernel_size: Tuple[int, int],
-    in_channels: int,
-    c: jax.Array,
-    stride: int | Tuple[int, int] = 1,
-    padding: int | Tuple[int, int] = 0,
-    axis: int = 1,
-) -> jax.Array:
-    """Hyperbolic unfold operation for 2D convolution in the Poincare ball model.
-
-    This operation extracts patches from the input and applies beta-concatenation
-    to properly combine hyperbolic vectors when increasing dimensionality.
-
-    The operation:
-    1. Maps input from manifold to tangent space at origin (logmap0)
-    2. Applies beta-concatenation rescaling to maintain hyperbolic geometry
-    3. Extracts patches using standard unfold (im2col)
-    4. Maps result back to manifold (expmap0)
-
-    Args:
-        x: Input array with shape [batch, channels, height, width]
-        kernel_size: Size of the convolving kernel as (kernel_h, kernel_w)
-        in_channels: Number of input channels
-        c: Curvature of the Poincare ball
-        stride: Stride of the convolution (default: 1)
-        padding: Zero-padding added to both sides of the input (default: 0)
-        axis: The manifold axis (default: 1 for channels)
-
-    Returns:
-        Unfolded array with shape [batch, kernel_vol * in_channels, num_patches]
-        where kernel_vol = kernel_h * kernel_w and num_patches = out_h * out_w
-
-    References:
-        Chen et al. "Fully Hyperbolic Neural Networks" (HNN++), ACL 2022
-        Beta-concatenation is used to properly rescale vectors when concatenating
-        in hyperbolic space to preserve geometric properties.
-    """
-    kernel_h, kernel_w = kernel_size
-    kernel_vol = kernel_h * kernel_w
-
-    # Step 1: Map to tangent space at origin
-    x_tangent = logmap0(x, c, axis=axis)
-
-    # Step 2: Apply beta-concatenation rescaling
-    # When concatenating vectors in hyperbolic space, we need to rescale
-    # beta_ni corresponds to the original dimension (in_channels)
-    # beta_n corresponds to the new dimension (in_channels * kernel_vol)
-    beta_ni = beta_func(in_channels / 2, 1 / 2)
-    beta_n = beta_func(in_channels * kernel_vol / 2, 1 / 2)
-    rescale_factor = beta_n / beta_ni
-    x_tangent = x_tangent * rescale_factor
-
-    # Step 3: Apply Euclidean unfold in tangent space
-    x_unfolded = unfold_2d(x_tangent, kernel_size, stride=stride, padding=padding)
-
-    # Step 4: Map back to manifold
-    x_manifold = expmap0(x_unfolded, c, axis=axis)
-
-    return x_manifold

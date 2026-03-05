@@ -4,8 +4,10 @@ Compares hypax (JAX) implementations against hypll (PyTorch) reference implement
 """
 
 import pytest
-import torch
 import jax.numpy as jnp
+
+torch = pytest.importorskip("torch")
+pytest.importorskip("hypll")
 
 from hypax.manifolds.poincare_ball._diffgeom import (
     mobius_add as hypax_mobius_add,
@@ -26,7 +28,22 @@ from hypll.manifolds.poincare_ball.math.diffgeom import (
     gyration as hypll_gyration,
 )
 
-from tests.conftest import assert_arrays_close
+
+def assert_arrays_close(jax_arr, torch_tensor, rtol=1e-5, atol=1e-6, msg=""):
+    torch_numpy = torch_tensor.cpu().numpy()
+    assert jnp.allclose(jax_arr, torch_numpy, rtol=rtol, atol=atol, equal_nan=True), (
+        f"{msg}\nExpected (torch): {torch_numpy}\nGot (jax): {jax_arr}\n"
+        f"Max diff: {jnp.max(jnp.abs(jax_arr - torch_numpy))}"
+    )
+
+
+@pytest.fixture(scope="session")
+def torch_device():
+    if torch.cuda.is_available():
+        return "cuda"
+    elif torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
 
 
 class TestMobiusAdd:

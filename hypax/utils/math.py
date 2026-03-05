@@ -2,7 +2,7 @@
 
 import jax.numpy as jnp
 from jax.scipy.special import gammaln
-
+import jax
 
 def beta_func(a: float | jnp.ndarray, b: float | jnp.ndarray) -> jnp.ndarray:
     """Compute the beta function B(a, b).
@@ -29,3 +29,11 @@ def beta_func(a: float | jnp.ndarray, b: float | jnp.ndarray) -> jnp.ndarray:
         https://aclanthology.org/2022.acl-long.389/
     """
     return jnp.exp(gammaln(a) + gammaln(b) - gammaln(a + b))
+
+def _ensure_batch_dim(tensor: jax.Array) -> tuple[jax.Array, bool]:
+    if tensor.ndim == 3:
+        return tensor, False
+    if tensor.ndim == 2:
+        return tensor[jnp.newaxis, ...], True
+    raise ValueError("Expected tensor with 2 or 3 dimensions")
+

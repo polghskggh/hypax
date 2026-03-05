@@ -77,7 +77,7 @@ manifold = PoincareBall(curvature=Curvature(1.0, learnable=True))
 model = HyperbolicCNN(rngs=nnx.Rngs(0), manifold=manifold)
 learning_rate = 0.001
 
-optimizer = nnx.Optimizer(model, riemannian_adam(learning_rate), wrt=nnx.Param)
+optimizer = nnx.Optimizer(model, optax.adam(learning_rate), wrt=nnx.Param)
 metrics = nnx.MultiMetric(
     accuracy=nnx.metrics.Accuracy(),
     loss=nnx.metrics.Average("loss"),

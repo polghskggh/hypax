@@ -5,6 +5,8 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
+from hypax.manifolds.poincare_ball._math import safe_arccosh, safe_norm
+
 def _normalize_axis(axis: int, ndim: int) -> int:
     if axis < 0:
         axis += ndim
@@ -44,13 +46,11 @@ def _restore_axes(
 
     return restored
 
-
 def _l_prime(y: jax.Array) -> jax.Array:
     cond = y < 1e-12
     safe_y = jnp.maximum(y, 1e-12)
     val = 2.0 * safe_arccosh(1 + 2.0 * safe_y) / jnp.sqrt(safe_y**2 + safe_y)
     return jnp.where(cond, 4.0, val)
-
 
 def _frechet_ball_forward(
     X: jax.Array,
@@ -97,47 +97,3 @@ def _frechet_ball_forward(
     init_converged = jnp.zeros(init_mu.shape[:-1], dtype=bool)
     (final_mu, _), _ = jax.lax.scan(body, (init_mu, init_converged), xs=None, length=max_iter)
     return final_mu
-
-
-def frechet_mean(
-    x: jax.Array,
-    c: jax.Array,
-    *,
-    manifold_axis: int,
-    reduce_axis: int,
-    keepdims: bool = False,
-    max_iter: int = 100,
-    rtol: float = 1e-6,
-    atol: float = 1e-6,
-) -> jax.Array:
-    """Compute the Fréchet mean of points on the Poincaré ball."""
-    permuted, axes, red = _align_axes_for_reduction(x, manifold_axis, reduce_axis)
-    perm_shape = permuted.shape
-    other_shape = perm_shape[:-2]
-    num_points = perm_shape[-2]
-    dim = perm_shape[-1]
-
-    flat = permuted.reshape((-1, num_points, dim))
-    mean_flat = _frechet_ball_forward(flat, c, max_iter=max_iter, rtol=rtol, atol=atol)
-    mean = mean_flat.reshape(other_shape + (dim,))
-    return _restore_axes(mean, axes, red, keepdims)
-
-
-def midpoint(
-    x: jax.Array,
-    c: jax.Array,
-    *,
-    manifold_axis: int,
-    reduce_axis: int,
-    keepdims: bool = False,
-) -> jax.Array:
-    """Compute the hyperbolic midpoint across ``reduce_axis``."""
-    permuted, axes, red = _align_axes_for_reduction(x, manifold_axis, reduce_axis)
-    lam = 2 / jnp.maximum(1 - c * jnp.sum(jnp.square(permuted), axis=-1, keepdims=True), 1e-15)
-    numerator = jnp.sum(lam * permuted, axis=-2, keepdims=True)
-    denominator = jnp.maximum(jnp.sum(lam - 1, axis=-2, keepdims=True), 1e-15)
-    frac = numerator / denominator
-    norm = jnp.sum(jnp.square(frac), axis=-1, keepdims=True)
-    mid = frac / (1 + jnp.sqrt(jnp.maximum(1 - c * norm, 1e-15)))
-    mid = jnp.squeeze(mid, axis=-2)
-    return _restore_axes(mid, axes, red, keepdims)

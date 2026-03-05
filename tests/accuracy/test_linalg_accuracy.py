@@ -7,10 +7,14 @@ import pytest
 import jax.numpy as jnp
 import jax
 
-from hypax.manifolds.poincare_ball._linalg import (
-    poincare_hyperplane_dists as hypax_hyperplane_dists,
-    poincare_fully_connected as hypax_fully_connected,
-)
+from hypax.manifolds.poincare_ball._math import poincare_hyperplane_dists as hypax_hyperplane_dists
+from hypax.manifolds.poincare_ball import PoincareBall
+from hypax.manifolds.curvature import Curvature
+
+
+def hypax_fully_connected(x, z, bias, c, axis=-1):
+    manifold = PoincareBall(Curvature(float(c), learnable=False))
+    return manifold.fully_connected(x, z, bias, axis=axis)
 
 
 class TestPoincareHyperplaneDists:

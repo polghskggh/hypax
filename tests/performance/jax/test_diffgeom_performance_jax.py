@@ -4,6 +4,9 @@ Benchmarks hypax (JAX) implementations.
 """
 
 import pytest
+
+pytest.importorskip("pytest_benchmark")
+
 import jax
 import jax.numpy as jnp
 

@@ -13,25 +13,20 @@ from jax._src.lax.convolution import conv_dimension_numbers
 
 from hypax.manifolds._base import Manifold
 from hypax.manifolds.curvature import Curvature
-from hypax.manifolds.poincare_ball._diffgeom import (
+from hypax.manifolds.poincare_ball._math import (
     expmap0,
     expmap,
     logmap0,
     logmap,
     project,
     mobius_add,
-    dist,
-    inner as poincare_inner,
-    euc_to_tangent as poincare_euc_to_tangent,
-    transp as poincare_transp,
-    cdist as poincare_cdist,
+    safe_norm, mobius_add_batch, gyration,
 )
 from hypax.manifolds.poincare_ball._math import rescale_norm, poincare_hyperplane_dists
 from hypax.manifolds.poincare_ball._stats import (
-    frechet_mean as poincare_frechet_mean,
-    midpoint as poincare_midpoint,
+    _align_axes_for_reduction, _frechet_ball_forward, _restore_axes,
 )
-from hypax.utils.math import beta_func
+from hypax.utils.math import beta_func, _ensure_batch_dim
 from jax import lax
 
 
@@ -83,6 +78,9 @@ class PoincareBall(Manifold):
         else:
             return logmap(x, y, self.curvature(), axis=axis)
 
+    def lambda_(self, squared_norm):
+        return  2 / jnp.clip(1 - self.curvature() * squared_norm, min=1e-15)
+
     def project(self, x: jax.Array, axis: int = -1, eps: float = -1.0) -> jax.Array:
         """Project point to be within the Poincaré ball.
 
@@ -123,11 +121,36 @@ class PoincareBall(Manifold):
         Returns:
             Hyperbolic distance
         """
-        return dist(x, y, self.curvature(), axis=axis, keepdims=keepdims)
+
+        c = self.curvature()
+        return (2 / jnp.sqrt(c) * jnp.atanh((jnp.sqrt(c) * safe_norm(mobius_add(-x, y, c, axis=axis), axis=axis,
+                                                                     keepdims=keepdims))))
 
     def cdist(self, x: jax.Array, y: jax.Array) -> jax.Array:
         """Pairwise hyperbolic distances between batches of points."""
-        return poincare_cdist(x, y, self.curvature())
+        c = self.curvature()
+        x, squeezed_x = _ensure_batch_dim(x)
+        y, squeezed_y = _ensure_batch_dim(y)
+
+        if x.shape[0] != y.shape[0]:
+            if x.shape[0] == 1:
+                x = jnp.broadcast_to(x, (y.shape[0],) + x.shape[1:])
+                squeezed_x = False
+            elif y.shape[0] == 1:
+                y = jnp.broadcast_to(y, (x.shape[0],) + y.shape[1:])
+                squeezed_y = False
+            else:
+                raise ValueError(
+                    f"Cannot broadcast batch dimensions: x has {x.shape[0]}, y has {y.shape[0]}"
+                )
+
+        diffs = mobius_add_batch(-x, y, c)
+        norm = safe_norm(diffs, axis=-1)
+        distances = 2 / jnp.sqrt(c) * jnp.atanh(jnp.sqrt(c) * norm)
+
+        if x.shape[0] == 1 and squeezed_x and squeezed_y:
+            return distances[0]
+        return distances
 
     def frechet_mean(
         self,
@@ -141,16 +164,17 @@ class PoincareBall(Manifold):
         atol: float = 1e-6,
     ) -> jax.Array:
         """Compute the Fréchet mean of points along ``reduce_axis``."""
-        return poincare_frechet_mean(
-            x=x,
-            c=self.curvature(),
-            manifold_axis=axis,
-            reduce_axis=reduce_axis,
-            keepdims=keepdims,
-            max_iter=max_iter,
-            rtol=rtol,
-            atol=atol,
-        )
+        c = self.curvature()
+        permuted, axes, red = _align_axes_for_reduction(x, axis, reduce_axis)
+        perm_shape = permuted.shape
+        other_shape = perm_shape[:-2]
+        num_points = perm_shape[-2]
+        dim = perm_shape[-1]
+
+        flat = permuted.reshape((-1, num_points, dim))
+        mean_flat = _frechet_ball_forward(flat, c, max_iter=max_iter, rtol=rtol, atol=atol)
+        mean = mean_flat.reshape(other_shape + (dim,))
+        return _restore_axes(mean, axes, red, keepdims)
 
     def midpoint(
         self,
@@ -161,13 +185,16 @@ class PoincareBall(Manifold):
         keepdims: bool = False,
     ) -> jax.Array:
         """Compute the hyperbolic midpoint along ``reduce_axis``."""
-        return poincare_midpoint(
-            x=x,
-            c=self.curvature(),
-            manifold_axis=axis,
-            reduce_axis=reduce_axis,
-            keepdims=keepdims,
-        )
+        c = self.curvature()
+        permuted, axes, red = _align_axes_for_reduction(x, axis, reduce_axis)
+        lam = 2 / jnp.maximum(1 - c * jnp.sum(jnp.square(permuted), axis=-1, keepdims=True), 1e-15)
+        numerator = jnp.sum(lam * permuted, axis=-2, keepdims=True)
+        denominator = jnp.maximum(jnp.sum(lam - 1, axis=-2, keepdims=True), 1e-15)
+        frac = numerator / denominator
+        norm = jnp.sum(jnp.square(frac), axis=-1, keepdims=True)
+        mid = frac / (1 + jnp.sqrt(jnp.maximum(1 - c * norm, 1e-15)))
+        mid = jnp.squeeze(mid, axis=-2)
+        return _restore_axes(mid, axes, red, keepdims)
 
     def inner(
         self,
@@ -178,40 +205,39 @@ class PoincareBall(Manifold):
         keepdims: bool = False,
     ) -> jax.Array:
         """Riemannian inner product at point ``x`` between tangent vectors ``u`` and ``v``."""
-
-        return poincare_inner(
-            x=x,
-            u=u,
-            v=v,
-            c=self.curvature(),
-            axis=axis,
-            keepdims=keepdims,
-        )
+        c = self.curvature()
+        broadcast_dim = max(x.ndim, u.ndim, v.ndim)
+        axis = axis if axis >= 0 else broadcast_dim + axis
+        x_norm_sq = jnp.square(x).sum(axis=axis - broadcast_dim + x.ndim, keepdims=True)
+        lambda_x = 2 / jnp.clip(1 - c * x_norm_sq, min=1e-15)
+        dot_prod = (u * v).sum(axis=axis, keepdims=keepdims)
+        return jnp.square(lambda_x) * dot_prod
 
     def euc_to_tangent(
         self, x: jax.Array, u: jax.Array, axis: int = -1
     ) -> jax.Array:
         """Project Euclidean tensor ``u`` onto the tangent space at ``x``."""
-
-        return poincare_euc_to_tangent(
-            x=x,
-            u=u,
-            c=self.curvature(),
-            axis=axis,
-        )
+        broadcast_dim = max(x.ndim, u.ndim)
+        axis = axis if axis >= 0 else broadcast_dim + axis
+        x_norm_sq = jnp.square(x).sum(axis=axis - broadcast_dim + x.ndim, keepdims=True)
+        lambda_x = 2 / jnp.clip(1 - self.curvature() * x_norm_sq, min=1e-15)
+        return u / jnp.square(lambda_x)
 
     def transp(
         self, x: jax.Array, y: jax.Array, v: jax.Array, axis: int = -1
     ) -> jax.Array:
         """Parallel transport ``v`` from tangent space at ``x`` to tangent space at ``y``."""
+        c = self.curvature()
+        broadcast_dim = max(x.ndim, y.ndim, v.ndim)
+        axis = axis if axis >= 0 else broadcast_dim + axis
 
-        return poincare_transp(
-            x=x,
-            y=y,
-            v=v,
-            c=self.curvature(),
-            axis=axis,
-        )
+        x_norm_sq = jnp.square(x).sum(axis=axis - broadcast_dim + x.ndim, keepdims=True)
+        lambda_x = 2 / jnp.clip(1 - c * x_norm_sq, min=1e-15)
+
+        y_norm_sq = jnp.square(y).sum(axis=axis - broadcast_dim + y.ndim, keepdims=True)
+        lambda_y = 2 / jnp.clip(1 - c * y_norm_sq, min=1e-15)
+
+        return gyration(y, -x, v, c, axis=axis) * lambda_x / lambda_y
 
     def construct_dl_parameters(
         self,

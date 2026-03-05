@@ -41,16 +41,19 @@ def test_havgpool2d_midpoint_matches_frechet_on_constant_input():
 
 
 def test_hmaxpool2d_matches_tangent_space_pooling():
-    """HMaxPool2D should match the op_in_tangent_space construction."""
-    x, manifold = _make_input(height=6, width=6, value=0.01)
-    pool = HMaxPool2D(kernel_size=2, manifold=manifold, stride=2)
+    """HMaxPool2D should match logmap → max_pool → expmap in tangent space (NHWC)."""
+    manifold = PoincareBall(Curvature(1.0))
+    # NHWC format: (batch, height, width, channels)
+    data = jnp.full((1, 6, 6, 4), 0.01)
+    x = ManifoldArray(data=data, manifold=manifold)
+
+    pool = HMaxPool2D(kernel_size=2, stride=2)
     out = pool(x)
 
-    tangent = manifold.logmap(y=x.data, x=None, axis=1)
-    nhwc = jnp.transpose(tangent, (0, 2, 3, 1))
-    ref = nnx.max_pool(nhwc, window_shape=(2, 2), strides=(2, 2), padding="VALID")
-    ref_nchw = jnp.transpose(ref, (0, 3, 1, 2))
-    expected = manifold.expmap(v=ref_nchw, x=None, axis=1)
+    # Reference: manual logmap → max_pool → expmap in NHWC
+    tangent = manifold.logmap(data, axis=-1)
+    ref = nnx.max_pool(tangent, window_shape=(2, 2), strides=(2, 2), padding="Valid")
+    expected = manifold.expmap(ref, axis=-1)
 
     assert jnp.allclose(out.data, expected)
 
